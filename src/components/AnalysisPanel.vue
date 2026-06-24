@@ -3,9 +3,9 @@ import { ref, computed } from 'vue'
 import { vocab, addVocab, removeVocab, isInVocab, exportVocab } from '../store.js'
 
 const props = defineProps({
-  sel: { type: Object, required: true } // 两步式选择状态（见 Reader.vue）
+  sel: { type: Object, required: true }
 })
-const emit = defineEmits(['word', 'grammar', 'translate', 'retry', 'close'])
+const emit = defineEmits(['retry', 'close'])
 
 const tab = ref('analysis')
 
@@ -39,7 +39,7 @@ function downloadVocab() {
   <aside class="panel scrollbar-thin">
     <div class="panel-head">
       <div class="tabs">
-        <button class="tab" :class="{ active: tab === 'analysis' }" @click="tab = 'analysis'">解析</button>
+        <button class="tab" :class="{ active: tab === 'analysis' }" @click="tab = 'analysis'">详情</button>
         <button class="tab" :class="{ active: tab === 'vocab' }" @click="tab = 'vocab'">
           生词本<span v-if="vocab.length" class="badge">{{ vocab.length }}</span>
         </button>
@@ -47,98 +47,65 @@ function downloadVocab() {
       <button class="ghost close" title="收起" @click="emit('close')">✕</button>
     </div>
 
-    <!-- 解析 -->
+    <!-- 详情 -->
     <div v-show="tab === 'analysis'" class="body">
       <div v-if="!sel.sentence" class="hint">
         <div class="hint-icon">👆</div>
-        点击正文中的任意一句开始。<br />先列出分词与语法点，点其中一项再看详情（更省 token）。
+        点击正文中的句子，在弹出的气泡里选单词 / 语法点 / 整句翻译，详情会显示在这里。
       </div>
 
       <template v-else>
         <div class="sentence">{{ sel.sentence }}</div>
 
-        <div v-if="sel.loading" class="loading"><span class="spinner" /> 正在分词…</div>
-
-        <div v-else-if="sel.error" class="error">
+        <div v-if="sel.error" class="error">
           <p>{{ sel.error }}</p>
           <button class="primary" @click="emit('retry')">重试</button>
         </div>
 
-        <template v-else>
-          <!-- 整句翻译（按需） -->
-          <section class="block">
-            <button
-              v-if="!sel.translation && !sel.translationLoading"
-              class="ghost translate-btn"
-              @click="emit('translate')"
-            >🌐 整句翻译</button>
-            <div v-if="sel.translationLoading" class="loading"><span class="spinner" /> 翻译中…</div>
-            <div v-if="sel.translationError" class="error-sm">{{ sel.translationError }}</div>
-            <div v-if="sel.translation" class="translation-box">
-              <div v-if="sel.translation.reading" class="reading">{{ sel.translation.reading }}</div>
-              <div class="translation">{{ sel.translation.translation }}</div>
-            </div>
-          </section>
+        <div v-else-if="!sel.active.type" class="hint sub">在气泡里点一个单词、语法点或「整句翻译」。</div>
 
-          <!-- 单词 -->
-          <section v-if="sel.words.length" class="block">
-            <div class="block-title">单词（点击看详情）</div>
-            <div class="chips">
-              <button
-                v-for="(w, i) in sel.words"
-                :key="i"
-                class="chip"
-                :class="{ active: sel.active.type === 'word' && sel.active.index === i }"
-                @click="emit('word', i)"
-              >
-                <span class="chip-surface">{{ w.surface }}</span>
-                <span v-if="w.reading" class="chip-reading">{{ w.reading }}</span>
+        <!-- 单词详情 -->
+        <section v-else-if="sel.active.type === 'word' && activeWord" class="block">
+          <div class="block-title">单词</div>
+          <div v-if="activeWord.loading" class="loading"><span class="spinner" /> 加载中…</div>
+          <div v-else-if="activeWord.error" class="error-sm">{{ activeWord.error }}</div>
+          <template v-else-if="activeWord.detail">
+            <div class="detail-head">
+              <span class="surface">{{ activeWord.surface }}</span>
+              <span v-if="activeWord.detail.reading" class="reading-sm">{{ activeWord.detail.reading }}</span>
+              <span v-if="activeWord.detail.pos" class="pos">{{ activeWord.detail.pos }}</span>
+              <button class="add ghost" :disabled="inVocab(activeWord)" @click="saveWord(activeWord)">
+                {{ inVocab(activeWord) ? '已收藏' : '＋ 收藏' }}
               </button>
             </div>
-            <div v-if="activeWord" class="detail">
-              <div v-if="activeWord.loading" class="loading"><span class="spinner" /> 加载中…</div>
-              <div v-else-if="activeWord.error" class="error-sm">{{ activeWord.error }}</div>
-              <template v-else-if="activeWord.detail">
-                <div class="detail-head">
-                  <span class="surface">{{ activeWord.surface }}</span>
-                  <span v-if="activeWord.detail.reading" class="reading-sm">{{ activeWord.detail.reading }}</span>
-                  <span v-if="activeWord.detail.pos" class="pos">{{ activeWord.detail.pos }}</span>
-                  <button class="add ghost" :disabled="inVocab(activeWord)" @click="saveWord(activeWord)">
-                    {{ inVocab(activeWord) ? '已收藏' : '＋ 收藏' }}
-                  </button>
-                </div>
-                <div class="word-mean">{{ activeWord.detail.meaning }}</div>
-                <div v-if="activeWord.detail.lemma && activeWord.detail.lemma !== activeWord.surface" class="word-note">原形：{{ activeWord.detail.lemma }}</div>
-                <div v-if="activeWord.detail.note" class="word-note">{{ activeWord.detail.note }}</div>
-              </template>
-            </div>
-          </section>
+            <div class="word-mean">{{ activeWord.detail.meaning }}</div>
+            <div v-if="activeWord.detail.lemma && activeWord.detail.lemma !== activeWord.surface" class="word-note">原形：{{ activeWord.detail.lemma }}</div>
+            <div v-if="activeWord.detail.note" class="word-note">{{ activeWord.detail.note }}</div>
+          </template>
+        </section>
 
-          <!-- 语法点 -->
-          <section v-if="sel.grammar.length" class="block">
-            <div class="block-title">语法点（点击看详情）</div>
-            <div class="chips">
-              <button
-                v-for="(g, i) in sel.grammar"
-                :key="i"
-                class="chip g-chip"
-                :class="{ active: sel.active.type === 'grammar' && sel.active.index === i }"
-                @click="emit('grammar', i)"
-              >{{ g.point }}</button>
-            </div>
-            <div v-if="activeGrammar" class="detail">
-              <div v-if="activeGrammar.loading" class="loading"><span class="spinner" /> 加载中…</div>
-              <div v-else-if="activeGrammar.error" class="error-sm">{{ activeGrammar.error }}</div>
-              <template v-else-if="activeGrammar.detail">
-                <div class="g-point">{{ activeGrammar.point }}</div>
-                <div class="g-exp">{{ activeGrammar.detail.explanation }}</div>
-                <div v-if="activeGrammar.detail.example" class="g-ex">例：{{ activeGrammar.detail.example }}</div>
-              </template>
-            </div>
-          </section>
+        <!-- 语法详情 -->
+        <section v-else-if="sel.active.type === 'grammar' && activeGrammar" class="block">
+          <div class="block-title">语法点</div>
+          <div v-if="activeGrammar.loading" class="loading"><span class="spinner" /> 加载中…</div>
+          <div v-else-if="activeGrammar.error" class="error-sm">{{ activeGrammar.error }}</div>
+          <template v-else-if="activeGrammar.detail">
+            <div class="g-point">{{ activeGrammar.point }}</div>
+            <div class="g-exp">{{ activeGrammar.detail.explanation }}</div>
+            <div v-if="activeGrammar.detail.example" class="g-ex">例：{{ activeGrammar.detail.example }}</div>
+          </template>
+        </section>
 
-          <div v-if="!sel.words.length && !sel.grammar.length" class="hint">未识别到可拆解的内容。</div>
-        </template>
+        <!-- 整句翻译 -->
+        <section v-else-if="sel.active.type === 'translation'" class="block">
+          <div class="block-title">整句翻译</div>
+          <div v-if="sel.translationLoading" class="loading"><span class="spinner" /> 翻译中…</div>
+          <div v-else-if="sel.translationError" class="error-sm">{{ sel.translationError }}</div>
+          <template v-else-if="sel.translation">
+            <div v-if="sel.translation.reading" class="reading">{{ sel.translation.reading }}</div>
+            <div class="translation">{{ sel.translation.translation }}</div>
+          </template>
+        </section>
       </template>
     </div>
 
@@ -173,6 +140,7 @@ function downloadVocab() {
 
 .body { padding: 14px; }
 .hint { color: var(--text-dim); text-align: center; padding: 40px 16px; line-height: 1.8; }
+.hint.sub { padding: 20px 8px; font-size: 14px; }
 .hint-icon { font-size: 30px; margin-bottom: 8px; }
 
 .sentence { font-size: 17px; line-height: 1.7; padding: 12px; background: var(--panel-2); border-radius: 10px; border: 1px solid var(--border); margin-bottom: 14px; }
@@ -187,37 +155,19 @@ function downloadVocab() {
 .block { margin-bottom: 16px; }
 .block-title { font-size: 12px; font-weight: 700; color: var(--text-dim); letter-spacing: 0.04em; margin-bottom: 8px; }
 
-.translate-btn { font-size: 14px; }
-.translation-box { padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; }
-.reading { color: var(--text-dim); font-size: 13px; margin-bottom: 4px; }
-.translation { font-size: 15px; line-height: 1.7; }
+.reading { color: var(--text-dim); font-size: 13px; margin-bottom: 6px; }
+.translation { font-size: 16px; line-height: 1.7; }
 
-/* 分词 chips */
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip {
-  display: inline-flex; align-items: baseline; gap: 5px;
-  padding: 6px 10px; border: 1px solid var(--border); border-radius: 999px;
-  background: var(--panel-2); cursor: pointer; line-height: 1.2;
-}
-.chip:hover { border-color: var(--accent); }
-.chip.active { background: var(--accent-soft); border-color: var(--accent); }
-.chip-surface { font-size: 15px; font-weight: 600; }
-.chip-reading { font-size: 11px; color: var(--text-dim); }
-.g-chip { color: var(--accent); }
-.g-chip.active { color: var(--accent); }
-
-/* 详情区 */
-.detail { margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--panel-2); }
 .detail-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.surface { font-size: 16px; font-weight: 700; }
+.surface { font-size: 18px; font-weight: 700; }
 .reading-sm { color: var(--text-dim); font-size: 13px; }
 .pos { font-size: 11px; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 1px 6px; }
 .add { margin-left: auto; padding: 2px 8px; font-size: 13px; }
-.word-mean { margin-top: 6px; line-height: 1.6; }
+.word-mean { margin-top: 8px; line-height: 1.7; font-size: 15px; }
 .word-note { margin-top: 4px; font-size: 12px; color: var(--text-dim); }
-.g-point { font-weight: 700; }
-.g-exp { margin-top: 6px; line-height: 1.6; }
-.g-ex { margin-top: 4px; font-size: 13px; color: var(--text-dim); }
+.g-point { font-weight: 700; font-size: 16px; }
+.g-exp { margin-top: 8px; line-height: 1.7; }
+.g-ex { margin-top: 6px; font-size: 13px; color: var(--text-dim); }
 
 .vocab-actions { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 .vocab-item { padding: 10px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; }

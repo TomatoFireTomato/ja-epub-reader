@@ -7,6 +7,7 @@ import {
   localToGlobal, buildRange, sentenceAt, pointOnText
 } from '../lib/sentence.js'
 import AnalysisPanel from './AnalysisPanel.vue'
+import SegmentBubble from './SegmentBubble.vue'
 
 const props = defineProps({
   book: { type: Object, required: true },
@@ -20,10 +21,15 @@ const chapterHtml = ref('')
 const currentIndex = ref(props.meta?.lastIndex || 0)
 const chapterTitle = ref('')
 const showToc = ref(false)
-// 宽屏默认展开解析面板；窄屏（手机/折叠屏）默认收起，点句子时再弹出
-const wide = typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
-const showPanel = ref(wide)
+// 抽屉（详情）默认收起：点击句子先出气泡，选了具体词/语法才滑开抽屉
+const showPanel = ref(false)
 const loadingChapter = ref(false)
+
+// 点击位置的分词气泡
+const bubble = reactive({ show: false, x: 0, y: 0 })
+function hideBubble() { bubble.show = false }
+function openBubble(e) { bubble.x = e.clientX; bubble.y = e.clientY; bubble.show = true }
+function isNarrow() { return window.matchMedia('(max-width: 600px)').matches }
 
 function closeOverlays() {
   showToc.value = false
@@ -96,6 +102,11 @@ function saveProgress() {
     })
   }, 400)
 }
+// 滚动时隐藏气泡（避免气泡停在错误位置），并保存进度
+function onScroll() {
+  if (bubble.show) hideBubble()
+  saveProgress()
+}
 
 // ---------- 点击选句 ----------
 let highlightObj = null
@@ -123,7 +134,7 @@ function onMouseUp(e) {
   const winSel = window.getSelection()
   if (winSel && !winSel.isCollapsed) {
     const t = winSel.toString().trim()
-    if (t) { clearHighlight(); selectSentence(t); return }
+    if (t) { clearHighlight(); openBubble(e); selectSentence(t); return }
   }
 
   // 2) 单击：必须点在文字字形上，否则视为空白点击 → 清除上次选中
@@ -143,6 +154,7 @@ function onMouseUp(e) {
   const sentence = text.slice(range[0], range[1]).trim()
   if (!sentence) { clearSelection(); return }
   setHighlight(domRange)
+  openBubble(e)
   selectSentence(sentence)
 }
 
@@ -151,18 +163,18 @@ const EMPTY_SEL = () => ({
   active: { type: '', index: -1 }, translation: null, translationLoading: false, translationError: ''
 })
 
-// 点击空白：去掉高亮与上次的选中结果
+// 点击空白：去掉高亮、气泡与上次的选中结果（抽屉随之显示空提示）
 function clearSelection() {
   clearHighlight()
+  hideBubble()
   segId++ // 取消可能在途的分词
   Object.assign(sel, EMPTY_SEL())
 }
 
-// 第一步：分词 + 语法点识别（小请求，省 token）
+// 第一步：分词 + 语法点识别（小请求，省 token）。只填气泡，不开抽屉
 async function selectSentence(sentence) {
   const id = ++segId
   Object.assign(sel, EMPTY_SEL(), { sentence, loading: true })
-  showPanel.value = true
   try {
     const r = await segmentSentence(sentence)
     if (id !== segId) return
@@ -179,12 +191,16 @@ async function selectSentence(sentence) {
   }
 }
 
-// 第二步：点单词 / 语法点取详情（带缓存、可折叠）
+// 第二步：在气泡里点单词 / 语法点 / 翻译 → 滑开抽屉展示详情（带缓存）
+function openDrawer() {
+  showPanel.value = true
+  if (isNarrow()) hideBubble() // 手机上底部弹层会盖住气泡，开抽屉时收起气泡
+}
 async function pickWord(i) {
   const w = sel.words[i]
   if (!w) return
-  if (sel.active.type === 'word' && sel.active.index === i) { sel.active = { type: '', index: -1 }; return }
   sel.active = { type: 'word', index: i }
+  openDrawer()
   if (w.detail || w.loading) return
   w.loading = true; w.error = ''
   try { w.detail = await explainWord(sel.sentence, w.surface) }
@@ -194,8 +210,8 @@ async function pickWord(i) {
 async function pickGrammar(i) {
   const g = sel.grammar[i]
   if (!g) return
-  if (sel.active.type === 'grammar' && sel.active.index === i) { sel.active = { type: '', index: -1 }; return }
   sel.active = { type: 'grammar', index: i }
+  openDrawer()
   if (g.detail || g.loading) return
   g.loading = true; g.error = ''
   try { g.detail = await explainGrammar(sel.sentence, g.point) }
@@ -203,6 +219,8 @@ async function pickGrammar(i) {
   finally { g.loading = false }
 }
 async function loadTranslation() {
+  sel.active = { type: 'translation', index: -1 }
+  openDrawer()
   if (sel.translation || sel.translationLoading) return
   sel.translationLoading = true; sel.translationError = ''
   try { sel.translation = await translateSentence(sel.sentence) }
@@ -221,20 +239,32 @@ function cycleTheme() {
   settings.value.theme = order[(i + 1) % order.length]
 }
 
-// 键盘翻页
+// 键盘翻页 / Esc 关气泡
 function onKey(e) {
+  if (e.key === 'Escape') { hideBubble(); return }
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
   if (e.key === 'ArrowRight' || e.key === 'PageDown') nextChapter()
   if (e.key === 'ArrowLeft' || e.key === 'PageUp') prevChapter()
 }
 
+// 点击气泡与正文之外的地方 → 关掉气泡
+function onDocPointerDown(e) {
+  if (!bubble.show) return
+  const t = e.target
+  if (t.closest && t.closest('.seg-bubble')) return
+  if (contentEl.value && contentEl.value.contains(t)) return
+  hideBubble()
+}
+
 onMounted(() => {
   loadChapter(currentIndex.value, true)
   window.addEventListener('keydown', onKey)
+  document.addEventListener('pointerdown', onDocPointerDown)
 })
 onBeforeUnmount(() => {
   clearTimeout(saveTimer)
   window.removeEventListener('keydown', onKey)
+  document.removeEventListener('pointerdown', onDocPointerDown)
 })
 
 watch(() => settings.value.vertical, () => nextTick(saveProgress))
@@ -275,7 +305,7 @@ watch(() => settings.value.vertical, () => nextTick(saveProgress))
         ref="scrollEl"
         class="reader-scroll scrollbar-thin"
         :class="{ vertical: settings.vertical }"
-        @scroll="saveProgress"
+        @scroll="onScroll"
       >
         <article
           ref="contentEl"
@@ -295,17 +325,28 @@ watch(() => settings.value.vertical, () => nextTick(saveProgress))
     <!-- 浮层遮罩：仅窄屏（抽屉/底部弹层）时可见，点击关闭 -->
     <div v-if="showToc || showPanel" class="scrim" @click="closeOverlays" />
 
-    <!-- 解析面板：宽屏内联右栏；折叠屏右侧抽屉；手机底部弹层 -->
+    <!-- 详情抽屉：宽屏内联右栏；折叠屏右侧抽屉；手机底部弹层。仅展示选中项详情 -->
     <AnalysisPanel
       v-if="showPanel"
       class="right"
       :sel="sel"
-      @word="pickWord"
-      @grammar="pickGrammar"
-      @translate="loadTranslation"
       @retry="retrySeg"
       @close="showPanel = false"
     />
+
+    <!-- 点击位置的分词气泡（挂到 body，避免被容器裁剪） -->
+    <Teleport to="body">
+      <SegmentBubble
+        v-if="bubble.show"
+        :sel="sel"
+        :x="bubble.x"
+        :y="bubble.y"
+        @word="pickWord"
+        @grammar="pickGrammar"
+        @translate="loadTranslation"
+        @close="hideBubble"
+      />
+    </Teleport>
   </div>
 </template>
 
