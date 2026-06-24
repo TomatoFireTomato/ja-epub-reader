@@ -1,0 +1,95 @@
+:root {
+  --bg: #f4f4f5;
+  --panel: #ffffff;
+  --panel-2: #fafafa;
+  --text: #1f2328;
+  --text-dim: #6b7280;
+  --border: #e5e7eb;
+  --accent: #6d4aff;
+  --accent-soft: #efeaff;
+  --reader-bg: #f6f1e7;
+  --reader-text: #2b2820;
+  --hl: rgba(255, 200, 70, 0.55);
+  --danger: #d64545;
+  font-synthesis: none;
+}
+
+[data-theme='light'] { --reader-bg: #ffffff; --reader-text: #1f2328; }
+[data-theme='sepia'] { --reader-bg: #f6f1e7; --reader-text: #45402f; }
+[data-theme='dark'] {
+  --bg: #1a1b1e; --panel: #25262b; --panel-2: #2c2d33; --text: #e6e6e6;
+  --text-dim: #9aa0a6; --border: #36373d; --accent: #9b87ff; --accent-soft: #312a52;
+  --reader-bg: #1f2023; --reader-text: #d6d3cb; --hl: rgba(255, 200, 70, 0.32);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; margin: 0; }
+
+body {
+  font-family: -apple-system, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
+    'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.07); }
+button.ghost { background: transparent; border-color: transparent; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+input, select, textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
+/* 自动选中的整句高亮（CSS Custom Highlight API） */
+::highlight(ja-sentence) {
+  background-color: var(--hl);
+  border-radius: 2px;
+}
+
+.app { height: 100%; display: flex; flex-direction: column; }
+
+.topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.topbar .brand { font-weight: 700; font-size: 16px; white-space: nowrap; }
+.topbar .spacer { flex: 1; }
+.topbar .book-title { color: var(--text-dim); font-size: 14px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .topbar { gap: 6px; padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
+  .topbar .brand-text { display: none; }          /* 窄屏仅保留图标 */
+  .topbar .book-title { max-width: 50vw; }
+  .topbar button { padding: 6px 9px; }
+}
+
+.main { flex: 1; min-height: 0; }
+
+.scrollbar-thin::-webkit-scrollbar { width: 9px; height: 9px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--border); border-radius: 9px; }
