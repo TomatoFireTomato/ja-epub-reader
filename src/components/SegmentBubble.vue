@@ -121,4 +121,20 @@ watch(() => [props.x, props.y, props.sel.loading, props.sel.words.length, props.
 }
 .b-translate:hover { border-color: var(--accent); color: var(--accent); }
 .b-translate.active { background: var(--accent-soft); border-style: solid; border-color: var(--accent); color: var(--accent); }
+
+/* 触屏：更大的点按目标与字号 */
+@media (max-width: 600px) {
+  .seg-bubble { max-width: min(360px, 94vw); padding: 12px 12px 12px; padding-right: 30px; border-radius: 14px; }
+  .b-close { top: 6px; right: 6px; padding: 6px 10px; font-size: 14px; }
+  .b-row { gap: 8px; }
+  .b-chip { padding: 9px 13px; }
+  .b-surface { font-size: 16px; }
+  .b-reading { font-size: 12px; }
+  .b-translate { padding: 9px 12px; font-size: 14px; }
+}
+@media (hover: none) {
+  /* 触屏设备：去掉 hover 态依赖，点按即有 active 反馈 */
+  .b-chip:active { background: var(--accent-soft); border-color: var(--accent); }
+  .b-translate:active { border-color: var(--accent); color: var(--accent); }
+}
 </style>
