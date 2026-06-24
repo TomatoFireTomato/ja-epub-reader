@@ -1,10 +1,10 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { settings } from '../store.js'
-import { analyzeSentence } from '../lib/ai.js'
+import { segmentSentence, explainWord, explainGrammar, translateSentence } from '../lib/ai.js'
 import {
   caretFromPoint, closestBlock, flattenBlock,
-  localToGlobal, buildRange, sentenceAt
+  localToGlobal, buildRange, sentenceAt, pointOnText
 } from '../lib/sentence.js'
 import AnalysisPanel from './AnalysisPanel.vue'
 
@@ -31,8 +31,19 @@ function closeOverlays() {
   if (!window.matchMedia('(min-width: 1024px)').matches) showPanel.value = false
 }
 
-const ana = reactive({ loading: false, error: '', result: null, sentence: '' })
-let reqId = 0
+// 两步式解析状态：先分词，再按需取每项详情
+const sel = reactive({
+  sentence: '',
+  loading: false, // 分词中
+  error: '',
+  words: [], // [{surface,reading,pos,detail,loading,error}]
+  grammar: [], // [{point,detail,loading,error}]
+  active: { type: '', index: -1 }, // 当前展开的详情项
+  translation: null,
+  translationLoading: false,
+  translationError: ''
+})
+let segId = 0
 
 const contentStyle = computed(() => ({
   fontSize: settings.value.fontSize + 'px',
@@ -44,7 +55,7 @@ const contentStyle = computed(() => ({
 async function loadChapter(index, restoreScroll = false) {
   if (index < 0 || index >= props.book.spine.length) return
   loadingChapter.value = true
-  clearHighlight()
+  clearSelection()
   try {
     const { html, title } = await props.book.getChapter(index)
     chapterHtml.value = html
@@ -108,55 +119,97 @@ function onMouseUp(e) {
   const root = contentEl.value
   if (!root) return
 
-  // 1) 手动拖选：直接解析选中文字
-  const sel = window.getSelection()
-  if (sel && !sel.isCollapsed) {
-    const t = sel.toString().trim()
-    if (t) {
-      clearHighlight()
-      analyze(t)
-      return
-    }
+  // 1) 手动拖选：直接对选中文字分词
+  const winSel = window.getSelection()
+  if (winSel && !winSel.isCollapsed) {
+    const t = winSel.toString().trim()
+    if (t) { clearHighlight(); selectSentence(t); return }
   }
 
-  // 2) 单击：定位整句
+  // 2) 单击：必须点在文字字形上，否则视为空白点击 → 清除上次选中
   const caret = caretFromPoint(e.clientX, e.clientY)
-  if (!caret) return
+  if (!caret || caret.node.nodeType !== 3 || !pointOnText(caret.node, caret.offset, e.clientX, e.clientY)) {
+    clearSelection()
+    return
+  }
   const block = closestBlock(caret.node, root)
-  if (!block) return
   const { text, map } = flattenBlock(block)
-  if (!text.trim()) return
+  if (!text.trim()) { clearSelection(); return }
   const gi = localToGlobal(map, caret.node, caret.offset)
-  if (gi == null) return
+  if (gi == null) { clearSelection(); return }
   const range = sentenceAt(text, gi)
-  if (!range) return
+  if (!range) { clearSelection(); return }
   const domRange = buildRange(map, range[0], range[1])
   const sentence = text.slice(range[0], range[1]).trim()
-  if (!sentence) return
+  if (!sentence) { clearSelection(); return }
   setHighlight(domRange)
-  showPanel.value = true
-  analyze(sentence)
+  selectSentence(sentence)
 }
 
-async function analyze(sentence) {
-  const myId = ++reqId
-  ana.loading = true
-  ana.error = ''
-  ana.result = null
-  ana.sentence = sentence
+const EMPTY_SEL = () => ({
+  sentence: '', loading: false, error: '', words: [], grammar: [],
+  active: { type: '', index: -1 }, translation: null, translationLoading: false, translationError: ''
+})
+
+// 点击空白：去掉高亮与上次的选中结果
+function clearSelection() {
+  clearHighlight()
+  segId++ // 取消可能在途的分词
+  Object.assign(sel, EMPTY_SEL())
+}
+
+// 第一步：分词 + 语法点识别（小请求，省 token）
+async function selectSentence(sentence) {
+  const id = ++segId
+  Object.assign(sel, EMPTY_SEL(), { sentence, loading: true })
   showPanel.value = true
   try {
-    const result = await analyzeSentence(sentence)
-    if (myId !== reqId) return
-    ana.result = result
+    const r = await segmentSentence(sentence)
+    if (id !== segId) return
+    sel.words = (r.words || []).map((w) => ({
+      surface: w.surface || '', reading: w.reading || '', pos: w.pos || '',
+      detail: null, loading: false, error: ''
+    }))
+    sel.grammar = (r.grammar || []).map((g) => ({ point: g.point || '', detail: null, loading: false, error: '' }))
   } catch (err) {
-    if (myId !== reqId) return
-    ana.error = err.message || String(err)
+    if (id !== segId) return
+    sel.error = err.message || String(err)
   } finally {
-    if (myId === reqId) ana.loading = false
+    if (id === segId) sel.loading = false
   }
 }
-function retry() { if (ana.sentence) analyze(ana.sentence) }
+
+// 第二步：点单词 / 语法点取详情（带缓存、可折叠）
+async function pickWord(i) {
+  const w = sel.words[i]
+  if (!w) return
+  if (sel.active.type === 'word' && sel.active.index === i) { sel.active = { type: '', index: -1 }; return }
+  sel.active = { type: 'word', index: i }
+  if (w.detail || w.loading) return
+  w.loading = true; w.error = ''
+  try { w.detail = await explainWord(sel.sentence, w.surface) }
+  catch (err) { w.error = err.message || String(err) }
+  finally { w.loading = false }
+}
+async function pickGrammar(i) {
+  const g = sel.grammar[i]
+  if (!g) return
+  if (sel.active.type === 'grammar' && sel.active.index === i) { sel.active = { type: '', index: -1 }; return }
+  sel.active = { type: 'grammar', index: i }
+  if (g.detail || g.loading) return
+  g.loading = true; g.error = ''
+  try { g.detail = await explainGrammar(sel.sentence, g.point) }
+  catch (err) { g.error = err.message || String(err) }
+  finally { g.loading = false }
+}
+async function loadTranslation() {
+  if (sel.translation || sel.translationLoading) return
+  sel.translationLoading = true; sel.translationError = ''
+  try { sel.translation = await translateSentence(sel.sentence) }
+  catch (err) { sel.translationError = err.message || String(err) }
+  finally { sel.translationLoading = false }
+}
+function retrySeg() { if (sel.sentence) selectSentence(sel.sentence) }
 
 // ---------- 字体 / 排版 ----------
 function bumpFont(d) {
@@ -246,8 +299,11 @@ watch(() => settings.value.vertical, () => nextTick(saveProgress))
     <AnalysisPanel
       v-if="showPanel"
       class="right"
-      :state="ana"
-      @retry="retry"
+      :sel="sel"
+      @word="pickWord"
+      @grammar="pickGrammar"
+      @translate="loadTranslation"
+      @retry="retrySeg"
       @close="showPanel = false"
     />
   </div>

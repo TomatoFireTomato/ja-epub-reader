@@ -126,3 +126,23 @@ export function buildRange(map, gStart, gEnd) {
   range.setEnd(b.node, b.offset)
   return range
 }
+
+// 判断点击坐标是否真的落在某个字符的字形上（用于过滤空白处点击）
+export function pointOnText(node, offset, x, y) {
+  if (!node || node.nodeType !== 3) return false
+  const len = node.nodeValue.length
+  const spans = []
+  if (offset < len) spans.push([offset, offset + 1])
+  if (offset > 0) spans.push([offset - 1, offset])
+  for (const [s, e] of spans) {
+    const r = document.createRange()
+    try { r.setStart(node, s); r.setEnd(node, e) } catch { continue }
+    for (const rect of r.getClientRects()) {
+      if (rect.width === 0 && rect.height === 0) continue
+      // 横向严格（页边/行尾留白不算），纵向放宽到覆盖行距留白
+      const padY = Math.max(2, rect.height * 0.6)
+      if (x >= rect.left - 1 && x <= rect.right + 1 && y >= rect.top - padY && y <= rect.bottom + padY) return true
+    }
+  }
+  return false
+}

@@ -143,6 +143,21 @@ app.post('/api/analyze', requireToken, async (req, res) => {
   }
 })
 
+// 通用补全：前端传 system + user，转发给 claude，原样返回文本（前端自行解析 JSON）
+app.post('/api/complete', requireToken, async (req, res) => {
+  const { system = '', user = '', model } = req.body || {}
+  if (!user || !String(user).trim()) return res.status(400).json({ error: '缺少 user' })
+  const prompt = (system ? String(system) + '\n\n' : '') + String(user)
+  try {
+    const text = await runClaude(prompt, model)
+    res.json({ text })
+  } catch (err) {
+    const msg = String((err && err.message) || err)
+    console.error('[complete] 失败：', msg)
+    res.status(500).json({ error: msg })
+  }
+})
+
 // 兜底错误处理：任何中间件错误（如非法 JSON body）都返回 JSON 而非 HTML
 app.use((err, req, res, _next) => {
   res.status(err.status || 500).json({ error: String((err && err.message) || err) })
