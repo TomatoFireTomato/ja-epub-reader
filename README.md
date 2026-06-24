@@ -8,7 +8,7 @@
 
 👉 **https://tomatofiretomato.github.io/ja-epub-reader/** （推送到 `main` 后由 GitHub Actions 自动构建发布）
 
-> 在线版是静态托管，AI 解析需在 ⚙️ 设置里选择 **API Key 模式**（填自己的 Key），或把**本地订阅后端**用隧道暴露后填入「后端地址」。详见 [DEPLOY.md](DEPLOY.md)。EPUB、设置、生词本都只存在你自己的浏览器里。
+> 在线版是静态托管，AI 解析需在 ⚙️ 设置里选择 **Anthropic API Key** 或 **DeepSeek API Key** 模式（填自己的 Key，浏览器直连即可用），或把**本地订阅后端**用隧道暴露后填入「后端地址」。详见 [DEPLOY.md](DEPLOY.md)。EPUB、设置、生词本都只存在你自己的浏览器里。
 
 ## 功能
 
@@ -18,7 +18,7 @@
 - 📒 **生词本**：一键收藏单词，可导出 `.txt`（制表符分隔，方便导入 Anki）。
 - 🎨 **阅读体验**：字号 / 行距 / 宽度可调，明亮 / 护眼 / 夜间主题，支持**竖排（日式纵书）**。
 
-## 两种 AI 接入方式（自己配置）
+## 三种 AI 接入方式（自己配置）
 
 打开右上角 **⚙️ 设置** 选择：
 
@@ -37,14 +37,14 @@ npm run dev:all      # 同时启动前端(5173) 和本地服务(8787)
 ### 2. Anthropic API Key（按量计费）
 不想跑本地服务时使用。在设置里填入 `sk-ant-...` 的 API Key，浏览器直连 Anthropic API。Key 只保存在你本地浏览器。
 
-```bash
-npm install
-npm run dev          # 只需前端
-```
+### 3. DeepSeek API Key（按量计费，便宜）
+在设置里填入 DeepSeek 的 `sk-...`（在 [platform.deepseek.com](https://platform.deepseek.com) 申请），浏览器直连 DeepSeek（OpenAI 兼容接口，支持 CORS，**在线静态站也能直接用**）。模型可选 `deepseek-chat`（V3，推荐）或 `deepseek-reasoner`（R1）。Key 只保存在你本地浏览器。
+
+> 模式 2、3 都只需前端：`npm install && npm run dev`。
 
 ## 部署到在线网页
 
-- **给别人用 / 公开** → 只能用 **API Key 模式**（纯静态部署 `dist/`，访客各自填自己的 Key）。个人订阅不能共享。
+- **给别人用 / 公开** → 用 **Anthropic / DeepSeek API Key 模式**（纯静态部署 `dist/`，访客各自填自己的 Key）。个人订阅不能共享。
 - **只给自己用、想保留订阅** → 前端可以上线，但后端要跑在你装了 Claude Code 的机器上，通过隧道连接，并用访问密钥保护。完整步骤见 **[DEPLOY.md](DEPLOY.md)**。
 
 设置里为此提供了两个字段（本地使用时留空即可）：

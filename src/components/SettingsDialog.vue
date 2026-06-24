@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { settings, MODELS } from '../store.js'
+import { settings, MODELS, DEEPSEEK_MODELS } from '../store.js'
 import { testConnection } from '../lib/ai.js'
 
 const props = defineProps({ open: Boolean })
@@ -55,6 +55,13 @@ function close() {
               <div class="mode-desc">浏览器直连 API，填入你的 Key。适合没有本地服务的场景。</div>
             </div>
           </label>
+          <label class="mode" :class="{ active: settings.mode === 'deepseek' }">
+            <input type="radio" value="deepseek" v-model="settings.mode" />
+            <div>
+              <div class="mode-title">DeepSeek API Key（按量计费）</div>
+              <div class="mode-desc">浏览器直连 DeepSeek，填入你的 Key。便宜，在线静态站也能直接用。</div>
+            </div>
+          </label>
         </div>
 
         <div v-if="settings.mode === 'local'" class="field">
@@ -78,9 +85,22 @@ function close() {
           <input type="text" v-model="settings.baseUrl" placeholder="https://api.anthropic.com" />
         </div>
 
+        <div v-if="settings.mode === 'deepseek'" class="field">
+          <label>DeepSeek API Key</label>
+          <input type="password" v-model="settings.deepseekKey" placeholder="sk-..." autocomplete="off" />
+          <div class="field-hint">在 <code>platform.deepseek.com</code> 申请，仅保存在本地浏览器。</div>
+        </div>
+        <div v-if="settings.mode === 'deepseek'" class="field">
+          <label>自定义 API 地址（可选）</label>
+          <input type="text" v-model="settings.deepseekBaseUrl" placeholder="https://api.deepseek.com" />
+        </div>
+
         <div class="field">
           <label>模型</label>
-          <select v-model="settings.model">
+          <select v-if="settings.mode === 'deepseek'" v-model="settings.deepseekModel">
+            <option v-for="m in DEEPSEEK_MODELS" :key="m.value" :value="m.value">{{ m.label }}</option>
+          </select>
+          <select v-else v-model="settings.model">
             <option v-for="m in MODELS" :key="m.value" :value="m.value">{{ m.label }}</option>
           </select>
         </div>
