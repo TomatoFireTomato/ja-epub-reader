@@ -4,6 +4,12 @@
 
 ![flow](https://img.shields.io/badge/Vue3-Vite-42b883) ![ai](https://img.shields.io/badge/AI-Claude-6d4aff)
 
+## 在线体验
+
+👉 **https://tomatofiretomato.github.io/ja-epub-reader/** （推送到 `main` 后由 GitHub Actions 自动构建发布）
+
+> 在线版是静态托管，AI 解析需在 ⚙️ 设置里选择 **API Key 模式**（填自己的 Key），或把**本地订阅后端**用隧道暴露后填入「后端地址」。详见 [DEPLOY.md](DEPLOY.md)。EPUB、设置、生词本都只存在你自己的浏览器里。
+
 ## 功能
 
 - 📂 **读取本地 EPUB**：拖拽或选择本地 `.epub`，文件只存在你自己的浏览器里（IndexedDB），刷新后可继续阅读，自动记忆进度。
