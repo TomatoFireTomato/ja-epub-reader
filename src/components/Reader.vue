@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { settings } from '../store.js'
+import { settings, ui } from '../store.js'
 import { segmentSentence, explainWord, explainGrammar, translateSentence } from '../lib/ai.js'
 import {
   caretFromPoint, closestBlock, flattenBlock,
@@ -51,14 +51,75 @@ const sel = reactive({
 })
 let segId = 0
 
-const contentStyle = computed(() => ({
-  fontSize: settings.value.fontSize + 'px',
-  lineHeight: settings.value.lineHeight,
-  maxWidth: settings.value.vertical ? 'none' : settings.value.maxWidth + 'px'
-}))
+// ---------- 分页模式 ----------
+const PAGE_SIDE = 30 // 页面左右边距
+const PAGE_VPAD = 32 // 页面上下边距
+const pageIndex = ref(0)
+const pageCount = ref(1)
+const pageW = ref(0) // 每页步进宽度（=视口宽）
+const pageH = ref(0)
+function pageEnabled() { return settings.value.pageMode && !settings.value.vertical }
+
+const contentStyle = computed(() => {
+  const base = {
+    fontSize: settings.value.fontSize + 'px',
+    lineHeight: settings.value.lineHeight
+  }
+  if (pageEnabled() && pageW.value) {
+    const w = pageW.value
+    return {
+      ...base,
+      boxSizing: 'border-box',
+      width: w + 'px',
+      height: pageH.value + 'px',
+      padding: PAGE_VPAD + 'px ' + PAGE_SIDE + 'px',
+      margin: '0',
+      maxWidth: 'none',
+      columnWidth: Math.max(100, w - 2 * PAGE_SIDE) + 'px',
+      columnGap: 2 * PAGE_SIDE + 'px',
+      columnFill: 'auto',
+      transform: `translateX(${-pageIndex.value * w}px)`,
+      transition: 'transform 0.28s ease'
+    }
+  }
+  return { ...base, maxWidth: settings.value.vertical ? 'none' : settings.value.maxWidth + 'px' }
+})
+
+async function computePages() {
+  if (!pageEnabled()) { pageCount.value = 1; return }
+  const vp = scrollEl.value
+  const content = contentEl.value
+  if (!vp || !content) return
+  pageW.value = vp.clientWidth
+  pageH.value = vp.clientHeight
+  await nextTick()
+  const sw = content.scrollWidth
+  pageCount.value = Math.max(1, Math.round(sw / pageW.value))
+  pageIndex.value = Math.max(0, Math.min(pageIndex.value, pageCount.value - 1))
+}
+
+function goPage(i) {
+  pageIndex.value = Math.max(0, Math.min(i, pageCount.value - 1))
+  saveProgress()
+}
+function nextPage() {
+  hideBubble()
+  if (pageIndex.value < pageCount.value - 1) goPage(pageIndex.value + 1)
+  else if (currentIndex.value < props.book.spine.length - 1) loadChapter(currentIndex.value + 1, false, 'start')
+}
+function prevPage() {
+  hideBubble()
+  if (pageIndex.value > 0) goPage(pageIndex.value - 1)
+  else if (currentIndex.value > 0) loadChapter(currentIndex.value - 1, false, 'last')
+}
+function togglePageMode() {
+  settings.value.pageMode = !settings.value.pageMode
+  clearSelection()
+  nextTick(() => { pageIndex.value = 0; computePages() })
+}
 
 // ---------- 章节加载 ----------
-async function loadChapter(index, restoreScroll = false) {
+async function loadChapter(index, restore = false, landing = 'start') {
   if (index < 0 || index >= props.book.spine.length) return
   loadingChapter.value = true
   clearSelection()
@@ -68,7 +129,12 @@ async function loadChapter(index, restoreScroll = false) {
     chapterTitle.value = title
     currentIndex.value = index
     await nextTick()
-    if (restoreScroll && props.meta) {
+    if (pageEnabled()) {
+      pageIndex.value = 0
+      await computePages()
+      if (landing === 'last') pageIndex.value = pageCount.value - 1
+      else if (restore && props.meta) pageIndex.value = Math.min(props.meta.lastPage || 0, pageCount.value - 1)
+    } else if (restore && props.meta) {
       scrollEl.value.scrollTop = props.meta.lastScroll || 0
       scrollEl.value.scrollLeft = props.meta.lastScrollLeft || 0
     } else {
@@ -98,7 +164,8 @@ function saveProgress() {
     emit('progress', {
       lastIndex: currentIndex.value,
       lastScroll: scrollEl.value?.scrollTop || 0,
-      lastScrollLeft: scrollEl.value?.scrollLeft || 0
+      lastScrollLeft: scrollEl.value?.scrollLeft || 0,
+      lastPage: pageIndex.value
     })
   }, 400)
 }
@@ -129,6 +196,7 @@ function clearHighlight() {
 function onMouseUp(e) {
   const root = contentEl.value
   if (!root) return
+  if (swiped) { swiped = false; return } // 刚刚是翻页滑动，不当作点击选句
 
   // 1) 手动拖选：直接对选中文字分词
   const winSel = window.getSelection()
@@ -239,12 +307,37 @@ function cycleTheme() {
   settings.value.theme = order[(i + 1) % order.length]
 }
 
-// 键盘翻页 / Esc 关气泡
+// 键盘翻页 / Esc 关气泡（分页模式翻页，滚动模式翻章）
 function onKey(e) {
   if (e.key === 'Escape') { hideBubble(); return }
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
-  if (e.key === 'ArrowRight' || e.key === 'PageDown') nextChapter()
-  if (e.key === 'ArrowLeft' || e.key === 'PageUp') prevChapter()
+  const fwd = e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' '
+  const back = e.key === 'ArrowLeft' || e.key === 'PageUp'
+  if (!fwd && !back) return
+  if (pageEnabled()) { fwd ? nextPage() : prevPage() }
+  else { fwd ? nextChapter() : prevChapter() }
+}
+
+// 触摸滑动翻页（分页模式）
+let touchX = 0, touchY = 0, swiped = false
+function onTouchStart(e) {
+  if (!pageEnabled() || !e.touches[0]) return
+  touchX = e.touches[0].clientX; touchY = e.touches[0].clientY; swiped = false
+}
+function onTouchEnd(e) {
+  if (!pageEnabled() || !e.changedTouches[0]) return
+  const dx = e.changedTouches[0].clientX - touchX
+  const dy = e.changedTouches[0].clientY - touchY
+  if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+    swiped = true // 标记本次为滑动，避免触发选句
+    dx < 0 ? nextPage() : prevPage()
+  }
+}
+
+let resizeTimer = null
+function onResize() {
+  clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(() => { if (pageEnabled()) computePages() }, 150)
 }
 
 // 点击气泡与正文之外的地方 → 关掉气泡
@@ -256,18 +349,33 @@ function onDocPointerDown(e) {
   hideBubble()
 }
 
+let ro = null
 onMounted(() => {
   loadChapter(currentIndex.value, true)
   window.addEventListener('keydown', onKey)
   document.addEventListener('pointerdown', onDocPointerDown)
+  window.addEventListener('resize', onResize)
+  // 监听阅读容器尺寸变化（视口缩放、旋转、面板开合）→ 重算分页
+  if (window.ResizeObserver && scrollEl.value) {
+    ro = new ResizeObserver(() => onResize())
+    ro.observe(scrollEl.value)
+  }
 })
 onBeforeUnmount(() => {
   clearTimeout(saveTimer)
+  clearTimeout(resizeTimer)
   window.removeEventListener('keydown', onKey)
   document.removeEventListener('pointerdown', onDocPointerDown)
+  window.removeEventListener('resize', onResize)
+  if (ro) ro.disconnect()
 })
 
 watch(() => settings.value.vertical, () => nextTick(saveProgress))
+// 字号 / 行距 / 分页 / 竖排 改变 → 重新计算分页
+watch(
+  () => [settings.value.fontSize, settings.value.lineHeight, settings.value.pageMode, settings.value.vertical],
+  () => { if (pageEnabled()) nextTick(computePages) }
+)
 </script>
 
 <template>
@@ -286,7 +394,7 @@ watch(() => settings.value.vertical, () => nextTick(saveProgress))
 
     <!-- 阅读区 -->
     <section class="center">
-      <div class="reader-toolbar">
+      <div v-show="!ui.immersive" class="reader-toolbar">
         <button class="ghost" title="目录" @click="showToc = !showToc">☰</button>
         <button class="ghost" title="上一章" :disabled="currentIndex === 0" @click="prevChapter">‹</button>
         <button class="ghost" title="下一章" :disabled="currentIndex === book.spine.length - 1" @click="nextChapter">›</button>
@@ -298,14 +406,20 @@ watch(() => settings.value.vertical, () => nextTick(saveProgress))
         <button class="ghost" title="竖排 / 横排" @click="settings.vertical = !settings.vertical">
           {{ settings.vertical ? '横排' : '竖排' }}
         </button>
+        <button class="ghost" :title="settings.pageMode ? '切换到滚动模式' : '切换到分页模式'" @click="togglePageMode">
+          {{ settings.pageMode ? '滚动' : '分页' }}
+        </button>
         <button class="ghost" title="解析面板" @click="showPanel = !showPanel">🔍</button>
+        <button class="ghost" title="沉浸阅读（收起顶栏）" @click="ui.immersive = true">⤢</button>
       </div>
 
       <div
         ref="scrollEl"
         class="reader-scroll scrollbar-thin"
-        :class="{ vertical: settings.vertical }"
+        :class="{ vertical: settings.vertical, paged: pageEnabled() }"
         @scroll="onScroll"
+        @touchstart.passive="onTouchStart"
+        @touchend.passive="onTouchEnd"
       >
         <article
           ref="contentEl"
@@ -314,12 +428,19 @@ watch(() => settings.value.vertical, () => nextTick(saveProgress))
           v-html="chapterHtml"
           @mouseup="onMouseUp"
         />
-        <div class="chapter-nav">
+        <div v-if="!pageEnabled()" class="chapter-nav">
           <button :disabled="currentIndex === 0" @click="prevChapter">← 上一章</button>
           <span>{{ currentIndex + 1 }} / {{ book.spine.length }}</span>
           <button :disabled="currentIndex === book.spine.length - 1" @click="nextChapter">下一章 →</button>
         </div>
       </div>
+
+      <!-- 分页模式：左右翻页按钮 + 页码 -->
+      <template v-if="pageEnabled()">
+        <button class="page-edge left" title="上一页" @click="prevPage">‹</button>
+        <button class="page-edge right" title="下一页" @click="nextPage">›</button>
+        <div class="page-indicator">{{ pageIndex + 1 }} / {{ pageCount }}</div>
+      </template>
     </section>
 
     <!-- 浮层遮罩：仅窄屏（抽屉/底部弹层）时可见，点击关闭 -->
@@ -363,7 +484,7 @@ watch(() => settings.value.vertical, () => nextTick(saveProgress))
 .toc-item:hover { background: var(--accent-soft); }
 .toc-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
-.center { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.center { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
 .reader-toolbar {
   display: flex; align-items: center; gap: 6px;
   padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel);
@@ -382,6 +503,26 @@ watch(() => settings.value.vertical, () => nextTick(saveProgress))
 .reader-scroll.vertical .reader-content {
   writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl;
   height: 100%; padding: 28px 40px; margin: 0;
+}
+
+/* 分页模式：视口裁剪，内容用多列排版并整体平移翻页（列样式见 contentStyle 内联） */
+.reader-scroll.paged { overflow: hidden; }
+.reader-scroll.paged .reader-content { will-change: transform; }
+
+/* 翻页按钮（左右边缘）与页码 */
+.page-edge {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 88px; display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 12px; background: var(--panel); color: var(--text-dim);
+  opacity: 0.32; font-size: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.12); z-index: 5;
+}
+.page-edge:hover { opacity: 0.9; border-color: var(--accent); }
+.page-edge.left { left: 6px; }
+.page-edge.right { right: 6px; }
+.page-indicator {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  color: var(--text-dim); font-size: 12px; background: var(--reader-bg);
+  padding: 2px 10px; border-radius: 999px; z-index: 5; pointer-events: none;
 }
 
 /* EPUB 内容的基本排版 */
@@ -440,8 +581,14 @@ watch(() => settings.value.vertical, () => nextTick(saveProgress))
   }
   .reader-content { padding: 24px 16px 20px; }
   .reader-scroll.vertical .reader-content { padding: 20px 24px; }
+  /* 工具栏按钮较多：隐藏标题、紧凑排布，必要时可横向滑动，避免换行破版 */
+  .reader-toolbar { gap: 2px; padding: 6px 6px; flex-wrap: nowrap; overflow-x: auto; }
+  .reader-toolbar::-webkit-scrollbar { display: none; }
   .reader-toolbar .ch-title { display: none; }
+  .reader-toolbar .spacer { display: none; }
+  .reader-toolbar button { padding: 6px 8px; }
   .chapter-nav { padding: 18px; gap: 12px; }
+  .page-edge { width: 36px; height: 72px; font-size: 20px; }
 }
 
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }

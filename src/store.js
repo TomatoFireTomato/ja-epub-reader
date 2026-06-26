@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref, reactive, watch } from 'vue'
 
 // 全局设置与生词本，持久化到 localStorage。
 
@@ -22,8 +22,12 @@ const DEFAULT_SETTINGS = {
   lineHeight: 1.95,
   theme: 'sepia', // light | sepia | dark
   vertical: false,
-  maxWidth: 760
+  maxWidth: 760,
+  pageMode: false // false=滚动模式；true=分页翻页模式
 }
+
+// 非持久化的临时 UI 状态（如沉浸模式收起顶栏）
+export const ui = reactive({ immersive: false })
 
 export const MODELS = [
   { value: 'claude-opus-4-8', label: 'Opus 4.8（最强，较慢）' },

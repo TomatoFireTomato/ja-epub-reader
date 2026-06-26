@@ -1,7 +1,7 @@
 <script setup>
 import { ref, shallowRef, onMounted } from 'vue'
 import { parseEpub } from './lib/epub.js'
-import { settings } from './store.js'
+import { settings, ui } from './store.js'
 import { bookId, saveBook, getBook, updateProgress } from './lib/storage.js'
 import Library from './components/Library.vue'
 import Reader from './components/Reader.vue'
@@ -66,14 +66,17 @@ function onProgress(patch) {
 </script>
 
 <template>
-  <div class="app" :data-theme="settings.theme">
-    <header class="topbar">
+  <div class="app" :class="{ immersive: ui.immersive && book }" :data-theme="settings.theme">
+    <header v-show="!(ui.immersive && book)" class="topbar">
       <span class="brand">📖<span class="brand-text"> 日语小说阅读器</span></span>
       <span v-if="book" class="book-title">· {{ book.title }}</span>
       <span class="spacer" />
       <button v-if="book" class="ghost" @click="closeBook">← 书库</button>
       <button class="ghost" @click="showSettings = true">⚙️ 设置</button>
     </header>
+
+    <!-- 沉浸模式下的浮动恢复按钮 -->
+    <button v-if="ui.immersive && book" class="immersive-restore" title="显示顶栏" @click="ui.immersive = false">⌄</button>
 
     <main class="main">
       <Reader

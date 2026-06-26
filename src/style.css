@@ -91,5 +91,16 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 
 .main { flex: 1; min-height: 0; }
 
+/* 沉浸模式：顶栏收起后的浮动恢复按钮 */
+.immersive-restore {
+  position: fixed; z-index: 46;
+  top: max(6px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  width: 48px; height: 22px; padding: 0; line-height: 1;
+  border-radius: 0 0 12px 12px; border: 1px solid var(--border); border-top: none;
+  background: var(--panel); color: var(--text-dim); opacity: 0.55;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+.immersive-restore:hover { opacity: 1; }
+
 .scrollbar-thin::-webkit-scrollbar { width: 9px; height: 9px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--border); border-radius: 9px; }
