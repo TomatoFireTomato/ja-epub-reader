@@ -30,6 +30,15 @@ const bubble = reactive({ show: false, x: 0, y: 0 })
 function hideBubble() { bubble.show = false }
 function openBubble(e) { bubble.x = e.clientX; bubble.y = e.clientY; bubble.show = true }
 function isNarrow() { return window.matchMedia('(max-width: 600px)').matches }
+// 点击是否落在阅读区中央（用于「点中央切换顶栏」的手势，避开左右翻页边缘与上下边）
+function isInCenterZone(x, y) {
+  const vp = scrollEl.value
+  if (!vp) return false
+  const r = vp.getBoundingClientRect()
+  const cx = (x - r.left) / r.width
+  const cy = (y - r.top) / r.height
+  return cx > 0.25 && cx < 0.75 && cy > 0.2 && cy < 0.8
+}
 
 function closeOverlays() {
   showToc.value = false
@@ -205,9 +214,12 @@ function onMouseUp(e) {
     if (t) { clearHighlight(); openBubble(e); selectSentence(t); return }
   }
 
-  // 2) 单击：必须点在文字字形上，否则视为空白点击 → 清除上次选中
+  // 2) 单击：必须点在文字字形上，否则视为空白点击
   const caret = caretFromPoint(e.clientX, e.clientY)
   if (!caret || caret.node.nodeType !== 3 || !pointOnText(caret.node, caret.offset, e.clientX, e.clientY)) {
+    // 已有选中/气泡：先消掉；否则点在中央空白处则切换顶栏（呼出/隐藏）
+    if (sel.sentence || bubble.show) { clearSelection(); return }
+    if (isInCenterZone(e.clientX, e.clientY)) { ui.immersive = !ui.immersive; return }
     clearSelection()
     return
   }
@@ -376,6 +388,19 @@ watch(
   () => [settings.value.fontSize, settings.value.lineHeight, settings.value.pageMode, settings.value.vertical],
   () => { if (pageEnabled()) nextTick(computePages) }
 )
+
+// 首次进入沉浸模式时，短暂提示「点中央可呼出栏」
+const immersiveHint = ref(false)
+let hintShown = false
+let hintTimer = null
+watch(() => ui.immersive, (v) => {
+  if (v && !hintShown) {
+    hintShown = true
+    immersiveHint.value = true
+    clearTimeout(hintTimer)
+    hintTimer = setTimeout(() => { immersiveHint.value = false }, 2600)
+  }
+})
 </script>
 
 <template>
@@ -442,6 +467,11 @@ watch(
         <div class="page-indicator">{{ pageIndex + 1 }} / {{ pageCount }}</div>
       </template>
     </section>
+
+    <!-- 进入沉浸模式的一次性提示 -->
+    <transition name="toast">
+      <div v-if="immersiveHint" class="immersive-hint">点击屏幕中央，可呼出 / 隐藏顶栏</div>
+    </transition>
 
     <!-- 浮层遮罩：仅窄屏（抽屉/底部弹层）时可见，点击关闭 -->
     <div v-if="showToc || showPanel" class="scrim" @click="closeOverlays" />
@@ -590,6 +620,16 @@ watch(
   .chapter-nav { padding: 18px; gap: 12px; }
   .page-edge { width: 36px; height: 72px; font-size: 20px; }
 }
+
+/* 沉浸提示 toast */
+.immersive-hint {
+  position: fixed; z-index: 47; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.74); color: #fff; font-size: 13px;
+  padding: 10px 16px; border-radius: 999px; pointer-events: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.toast-enter-active, .toast-leave-active { transition: opacity 0.4s ease; }
+.toast-enter-from, .toast-leave-to { opacity: 0; }
 
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
