@@ -132,7 +132,7 @@ function togglePageMode() {
 }
 
 // ---------- 章节加载 ----------
-async function loadChapter(index, restore = false, landing = 'start') {
+async function loadChapter(index, restore = false, landing = 'start', anchor = '') {
   if (index < 0 || index >= props.book.spine.length) return
   loadingChapter.value = true
   clearSelection()
@@ -146,14 +146,17 @@ async function loadChapter(index, restore = false, landing = 'start') {
     if (pageEnabled()) {
       pageIndex.value = 0
       await computePages()
-      if (landing === 'last') pageIndex.value = pageCount.value - 1
+      if (anchor && scrollToAnchor(anchor)) { /* 已定位到锚点所在页 */ }
+      else if (landing === 'last') pageIndex.value = pageCount.value - 1
       else if (restore && props.meta) pageIndex.value = Math.min(props.meta.lastPage || 0, pageCount.value - 1)
-    } else if (restore && props.meta) {
-      scrollEl.value.scrollTop = props.meta.lastScroll || 0
-      scrollEl.value.scrollLeft = props.meta.lastScrollLeft || 0
     } else {
       scrollEl.value.scrollTop = 0
       scrollEl.value.scrollLeft = settings.value.vertical ? scrollEl.value.scrollWidth : 0
+      if (anchor && scrollToAnchor(anchor)) { /* 已滚到锚点 */ }
+      else if (restore && props.meta) {
+        scrollEl.value.scrollTop = props.meta.lastScroll || 0
+        scrollEl.value.scrollLeft = props.meta.lastScrollLeft || 0
+      }
     }
     saveProgress()
   } finally {
@@ -161,9 +164,28 @@ async function loadChapter(index, restore = false, landing = 'start') {
   }
 }
 
-function gotoChapter(index) {
+// 定位章节内的锚点元素（目录里 file#anchor 的那种）。返回是否找到。
+function scrollToAnchor(anchor) {
+  const root = contentEl.value
+  if (!anchor || !root) return false
+  let el = null
+  try { el = root.querySelector('#' + CSS.escape(anchor)) } catch { /* 非法选择符 */ }
+  if (!el) try { el = root.querySelector('[name="' + anchor.replace(/"/g, '\\"') + '"]') } catch {}
+  if (!el) return false
+  if (pageEnabled()) {
+    // el 与 content 同被 translateX 平移，二者左缘之差不受 transform 影响 → 稳定的页内偏移
+    const offset = el.getBoundingClientRect().left - root.getBoundingClientRect().left
+    goPage(Math.round(Math.abs(offset) / (pageW.value || 1)))
+  } else {
+    el.scrollIntoView({ block: 'start', inline: 'nearest' })
+  }
+  return true
+}
+
+function gotoChapter(index, anchor) {
   showToc.value = false
-  loadChapter(index, false)
+  if (anchor && index === currentIndex.value) { scrollToAnchor(anchor); return }
+  loadChapter(index, false, 'start', anchor)
 }
 function prevChapter() { if (currentIndex.value > 0) loadChapter(currentIndex.value - 1, false) }
 function nextChapter() {
@@ -428,11 +450,11 @@ watch(() => ui.immersive, (v) => {
       <button class="toc-back ghost" @click="emit('close')">← 书库</button>
       <div class="toc-head">目录</div>
       <button
-        v-for="item in book.toc"
-        :key="item.index + item.label"
+        v-for="(item, i) in book.toc"
+        :key="i"
         class="toc-item ghost"
         :class="{ active: item.index === currentIndex }"
-        @click="gotoChapter(item.index)"
+        @click="gotoChapter(item.index, item.anchor)"
       >{{ item.label }}</button>
     </aside>
 

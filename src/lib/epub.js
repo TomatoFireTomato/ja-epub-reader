@@ -80,9 +80,13 @@ export async function parseEpub(input) {
   if (spine.length === 0) throw new Error('解析失败：spine 为空')
 
   // 每个章节文件在 zip 内的路径 → spine 索引（供目录定位）
+  // 同时登记文件名(basename)作兜底：有些书目录路径前缀不规范，靠文件名也能匹配上。
   const pathToIndex = {}
   spine.forEach((id, i) => {
-    pathToIndex[resolvePath(opfDir, manifest[id].href)] = i
+    const p = resolvePath(opfDir, manifest[id].href)
+    pathToIndex[p] = i
+    const base = p.split('/').pop()
+    if (base && !(base in pathToIndex)) pathToIndex[base] = i
   })
 
   const book = {
@@ -130,7 +134,21 @@ async function buildToc(book, opf, pathToIndex) {
     catch { /* 回退到 spine */ }
   }
   // 兜底：用 spine 顺序生成目录
-  return book.spine.map((id, i) => ({ label: '第 ' + (i + 1) + ' 节', index: i }))
+  return book.spine.map((id, i) => ({ label: '第 ' + (i + 1) + ' 节', index: i, anchor: '' }))
+}
+
+// 取 href 中的锚点（# 后面的部分），用于章节内定位
+function hashOf(href) {
+  const i = href.indexOf('#')
+  return i >= 0 ? href.slice(i + 1) : ''
+}
+
+// 先按完整路径匹配 spine，匹配不上再按文件名兜底（容忍目录路径前缀不规范的书）
+function lookupIndex(pathToIndex, target) {
+  if (target in pathToIndex) return pathToIndex[target]
+  const base = target.split('/').pop()
+  if (base && base in pathToIndex) return pathToIndex[base]
+  return null
 }
 
 async function tocFromNav(book, navPath, pathToIndex) {
@@ -143,9 +161,8 @@ async function tocFromNav(book, navPath, pathToIndex) {
   const out = []
   for (const a of nav.querySelectorAll('a[href]')) {
     const href = a.getAttribute('href')
-    const target = resolvePath(navDir, href)
-    const index = pathToIndex[target]
-    if (index != null) out.push({ label: (a.textContent || '').trim() || '（无标题）', index })
+    const index = lookupIndex(pathToIndex, resolvePath(navDir, href))
+    if (index != null) out.push({ label: (a.textContent || '').trim() || '（无标题）', index, anchor: hashOf(href) })
   }
   return dedupeToc(out)
 }
@@ -159,8 +176,8 @@ async function tocFromNcx(book, ncxPath, pathToIndex) {
     const content = els(np, 'content')[0]
     const src = content && content.getAttribute('src')
     if (!src) continue
-    const index = pathToIndex[resolvePath(ncxDir, src)]
-    if (index != null) out.push({ label: label || '（无标题）', index })
+    const index = lookupIndex(pathToIndex, resolvePath(ncxDir, src))
+    if (index != null) out.push({ label: label || '（无标题）', index, anchor: hashOf(src) })
   }
   return dedupeToc(out)
 }
@@ -168,7 +185,7 @@ async function tocFromNcx(book, ncxPath, pathToIndex) {
 function dedupeToc(list) {
   const seen = new Set()
   return list.filter((e) => {
-    const k = e.index + '|' + e.label
+    const k = e.index + '|' + e.anchor + '|' + e.label
     if (seen.has(k)) return false
     seen.add(k)
     return true
