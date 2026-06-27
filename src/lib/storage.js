@@ -36,7 +36,20 @@ export function bookId(file) {
 }
 
 export async function saveBook(rec) {
-  return tx('readwrite', (s) => s.put(rec))
+  // 取纯对象再存：避免把 Vue 响应式 Proxy 直接塞进 IndexedDB
+  // （structured clone 克隆不了 Proxy，会报 "could not be cloned"）
+  const plain = {
+    id: rec.id,
+    title: rec.title,
+    creator: rec.creator,
+    blob: rec.blob,
+    openedAt: rec.openedAt,
+    lastIndex: rec.lastIndex,
+    lastScroll: rec.lastScroll,
+    lastScrollLeft: rec.lastScrollLeft,
+    lastPage: rec.lastPage
+  }
+  return tx('readwrite', (s) => s.put(plain))
 }
 
 export async function getBook(id) {
