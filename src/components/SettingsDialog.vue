@@ -111,6 +111,13 @@ function close() {
           </button>
           <span v-if="testMsg" class="test-msg" :class="{ ok: testOk, bad: !testOk }">{{ testMsg }}</span>
         </div>
+
+        <div class="field" style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border)">
+          <label class="checkbox">
+            <input type="checkbox" v-model="settings.localSegment" /> 本地分词（kuromoji，离线、零 token）
+          </label>
+          <div class="field-hint">分词在浏览器本地完成，不花 token、可离线（首次加载 ~12MB 词典并缓存）。<b>仅给单词</b>，不识别语法点——需要语法点请关掉它、改用上面的 AI 分词。词义 / 语法 / 翻译仍按上面所选方式。</div>
+        </div>
       </section>
 
       <section class="sec">

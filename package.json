@@ -12,6 +12,7 @@
     "dev:all": "concurrently -k -n web,api -c blue,green \"vite\" \"node server/index.js\""
   },
   "dependencies": {
+    "@sglkc/kuromoji": "^1.1.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "jszip": "^3.10.1",

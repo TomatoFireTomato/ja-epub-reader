@@ -1,4 +1,5 @@
 import { settings } from '../store.js'
+import { segmentLocal } from './localseg.js'
 
 // 从模型回复文本里提取 JSON 对象
 function extractJson(text) {
@@ -114,6 +115,8 @@ const SEG_SYSTEM = `你是日语教师。请对给定日语句子做分词与语
 words 按出现顺序覆盖实词与重要助词/助动词；grammar 列出值得讲解的语法点，没有则空数组。只输出 JSON，不要多余内容。`
 
 export function segmentSentence(sentence) {
+  // 本地分词（kuromoji）：离线、零 token；不含语法点
+  if (settings.value.localSegment) return segmentLocal(sentence)
   return completeJson(SEG_SYSTEM, `句子：「${sentence}」`)
 }
 

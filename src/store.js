@@ -17,6 +17,8 @@ const DEFAULT_SETTINGS = {
   deepseekKey: '',
   deepseekModel: 'deepseek-chat',
   deepseekBaseUrl: '',
+  // 本地分词（kuromoji，离线、零 token；不识别语法点）
+  localSegment: false,
   // 阅读排版
   fontSize: 20,
   lineHeight: 1.95,
