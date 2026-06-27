@@ -19,6 +19,8 @@ const DEFAULT_SETTINGS = {
   deepseekBaseUrl: '',
   // 本地分词（kuromoji，离线、零 token；不识别语法点）
   localSegment: false,
+  // 本地通用模型（Qwen2.5-0.5B，浏览器 WebGPU；词义/语法/翻译离线，质量有限）
+  localLLM: false,
   // 阅读排版
   fontSize: 20,
   lineHeight: 1.95,
