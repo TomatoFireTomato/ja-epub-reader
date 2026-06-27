@@ -17,11 +17,8 @@ const DEFAULT_SETTINGS = {
   deepseekKey: '',
   deepseekModel: 'deepseek-chat',
   deepseekBaseUrl: '',
-  // 本地分词（kuromoji，离线、零 token；不识别语法点）
+  // 本地分词（kuromoji，离线、零 token；区分单词与助词/助动词）
   localSegment: false,
-  // 本地通用模型（Qwen2.5-0.5B，浏览器 WebGPU；词义/语法/翻译离线，质量有限）
-  localLLM: false,
-  localLLMReady: false, // 是否已下载过模型（下过后刷新可从缓存自动加载，无需再次手动下载）
   // 阅读排版
   fontSize: 20,
   lineHeight: 1.95,

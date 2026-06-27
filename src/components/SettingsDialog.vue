@@ -2,13 +2,6 @@
 import { ref } from 'vue'
 import { settings, MODELS, DEEPSEEK_MODELS } from '../store.js'
 import { testConnection } from '../lib/ai.js'
-import { llmState, loadModel } from '../lib/localllm.js'
-
-const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu
-
-function downloadLLM() {
-  loadModel().catch(() => {}) // 错误已反映在 llmState
-}
 
 const props = defineProps({ open: Boolean })
 const emit = defineEmits(['update:open'])
@@ -123,25 +116,7 @@ function close() {
           <label class="checkbox">
             <input type="checkbox" v-model="settings.localSegment" /> 本地分词（kuromoji，离线、零 token）
           </label>
-          <div class="field-hint">分词在浏览器本地完成，不花 token、可离线（首次加载 ~12MB 词典并缓存）。<b>仅给单词</b>，不识别语法点——需要语法点请关掉它、改用上面的 AI 分词。</div>
-        </div>
-
-        <div class="field" style="margin-top: 12px">
-          <label class="checkbox">
-            <input type="checkbox" v-model="settings.localLLM" /> 本地大模型（Qwen2.5-0.5B，词义 / 语法 / 翻译离线）
-          </label>
-          <div class="field-hint">勾选后，词义 / 语法 / 翻译改用浏览器内的 Qwen2.5-0.5B（<b>需要 WebGPU</b>，Chrome / Edge 113+）。首次需下载 <b>~483MB</b> 模型（缓存后复用），下载完成后才会启用。质量不及上面的 API，输出为朴素文本。建议配合「本地分词」实现基本离线。</div>
-          <div v-if="settings.localLLM && !hasWebGPU" class="test-msg bad" style="margin-top:6px">
-            你的浏览器不支持 WebGPU，无法运行本地模型。请用 Chrome / Edge 113+ 并启用 WebGPU，或改用上面的 API。
-          </div>
-          <div v-else-if="settings.localLLM" class="llm-row">
-            <button v-if="llmState.status !== 'ready'" :disabled="llmState.status === 'loading'" @click="downloadLLM">
-              {{ llmState.status === 'loading' ? `下载中… ${llmState.progress}%` : '下载 / 加载模型（~483MB）' }}
-            </button>
-            <span v-if="llmState.status === 'ready'" class="test-msg ok">模型已就绪 ✓，词义/语法/翻译将走本地</span>
-            <span v-if="llmState.status === 'error'" class="test-msg bad">{{ llmState.error }}</span>
-            <span v-else-if="llmState.status === 'loading' && llmState.file" class="field-hint" style="margin:0">{{ llmState.file }}</span>
-          </div>
+          <div class="field-hint">分词在浏览器本地完成，不花 token、可离线（首次加载 ~12MB 词典并缓存）。会区分<b>单词</b>与<b>助词/助动词（语法成分）</b>；但识别不了 ～ている 这类跨多词句型。词义 / 语法 / 翻译仍按上面所选 AI 方式。</div>
         </div>
       </section>
 
@@ -207,7 +182,6 @@ function close() {
 .checkbox { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 
 .test-row { margin-top: 14px; display: flex; align-items: center; gap: 12px; }
-.llm-row { margin-top: 10px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .test-msg { font-size: 13px; }
 .test-msg.ok { color: #2f9e44; }
 .test-msg.bad { color: var(--danger); }
