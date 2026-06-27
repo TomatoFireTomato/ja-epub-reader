@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { settings } from '../store.js'
 
 // 本地通用模型（Qwen2.5-0.5B）的主线程封装：管理 Worker、下载进度、文本生成。
 export const llmState = ref({ status: 'idle', progress: 0, file: '', error: '' })
@@ -25,6 +26,7 @@ function ensureWorker() {
       }
     } else if (m.type === 'ready') {
       llmState.value = { status: 'ready', progress: 100, file: '', error: '' }
+      settings.value.localLLMReady = true // 记下已下载，之后刷新可自动从缓存加载
       if (readyResolve) { readyResolve(); readyResolve = readyReject = null }
     } else if (m.type === 'result') {
       const r = pending.get(m.id)
@@ -59,17 +61,23 @@ export function loadModel() {
 
 export function llmReady() { return llmState.value.status === 'ready' }
 
-// 生成（不自动下载：模型未就绪时明确报错，由用户在设置里显式下载，避免点词时静默拉 483MB 卡住）
+// 生成。未就绪时：若以前下载过（localLLMReady）则从缓存自动加载；否则明确报错引导去设置下载，
+// 避免“点词就静默拉 483MB 卡死”，同时让下载过的用户刷新后无需再手动点加载。
 export function llmGenerate(system, user) {
-  if (llmState.value.status !== 'ready') {
-    const msg = llmState.value.status === 'loading'
-      ? `本地模型仍在下载/加载中（${llmState.value.progress || 0}%），请稍候…`
-      : '本地模型未加载。请在「设置 → 本地大模型」里点「下载/加载模型」，完成后再用。'
-    return Promise.reject(new Error(msg))
-  }
-  ensureWorker()
   const id = ++reqId
   const p = new Promise((resolve, reject) => pending.set(id, { resolve, reject }))
-  worker.postMessage({ type: 'generate', id, system, user })
+  const send = () => { ensureWorker(); worker.postMessage({ type: 'generate', id, system, user }) }
+  const fail = (msg) => { const r = pending.get(id); if (r) { pending.delete(id); r.reject(new Error(msg)) } }
+
+  if (llmState.value.status === 'ready') {
+    send()
+  } else if (llmState.value.status === 'loading') {
+    loadModel().then(send).catch((e) => fail(e.message || String(e)))
+  } else if (settings.value.localLLMReady) {
+    // 之前下载过：从缓存加载（不重下、不卡），加载完再生成
+    loadModel().then(send).catch((e) => fail(e.message || String(e)))
+  } else {
+    fail('本地模型未下载。请在「设置 → 本地大模型」里点「下载 / 加载模型」，完成后再用。')
+  }
   return p
 }
