@@ -1,6 +1,7 @@
 import { settings } from '../store.js'
 import { segmentLocal } from './localseg.js'
 import { detectLang } from './sentence.js'
+import { detectGrammarEn } from './grammar-en.js'
 
 // 从模型回复文本里提取 JSON 对象
 function extractJson(text) {
@@ -120,7 +121,7 @@ const SEG_SYSTEM_EN = `你是英语老师。请对给定英文句子做分词与
 只输出 JSON：{"words":[{"surface":"句中的词","pos":"简短中文词性"}],"grammar":[{"point":"语法点名，如 现在完成时、被动语态、不定式、定语从句 等"}]}
 words 按出现顺序覆盖实义词（介词、冠词等可略）；grammar 列出值得讲解的语法点，没有则空数组。只输出 JSON，不要多余内容。`
 
-// 英文本地分词：按词边界切分，零 token、无语法点（详情点开时再走 API）
+// 英文本地分词：按词边界切分 + 常见语法/短语识别，零 token（词义点开时再走 API）
 function segmentLocalEn(sentence) {
   const words = []
   const seen = new Set()
@@ -131,7 +132,7 @@ function segmentLocalEn(sentence) {
     seen.add(key)
     words.push({ surface: w, reading: '', pos: '', lemma: w })
   }
-  return Promise.resolve({ words, grammar: [] })
+  return Promise.resolve({ words, grammar: detectGrammarEn(sentence) })
 }
 
 export function segmentSentence(sentence) {
