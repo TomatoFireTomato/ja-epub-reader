@@ -253,6 +253,10 @@ function clearSelection() {
 
 // 第一步：分词 + 语法点识别（小请求，省 token）。只填气泡，不开抽屉
 async function selectSentence(sentence) {
+  // 同一句已分词过：直接复用缓存（气泡已由 openBubble 弹出），不重复请求
+  if (sentence === sel.sentence && !sel.error && (sel.words.length || sel.grammar.length)) {
+    return
+  }
   const id = ++segId
   Object.assign(sel, EMPTY_SEL(), { sentence, loading: true })
   try {
@@ -274,7 +278,7 @@ async function selectSentence(sentence) {
 // 第二步：在气泡里点单词 / 语法点 / 翻译 → 滑开抽屉展示详情（带缓存）
 function openDrawer() {
   showPanel.value = true
-  if (isNarrow()) hideBubble() // 手机上底部弹层会盖住气泡，开抽屉时收起气泡
+  hideBubble() // 详情出现后收起气泡（分词已缓存，再次点同一句会直接复用）
 }
 async function pickWord(i) {
   const w = sel.words[i]
