@@ -8,6 +8,7 @@ import {
 } from '../lib/sentence.js'
 import AnalysisPanel from './AnalysisPanel.vue'
 import SegmentBubble from './SegmentBubble.vue'
+import { addFurigana, removeFurigana } from '../lib/furigana.js'
 
 const props = defineProps({
   book: { type: Object, required: true },
@@ -138,6 +139,7 @@ async function loadChapter(index, restore = false, landing = 'start') {
     chapterTitle.value = title
     currentIndex.value = index
     await nextTick()
+    if (settings.value.furigana && contentEl.value) await addFurigana(contentEl.value)
     if (pageEnabled()) {
       pageIndex.value = 0
       await computePages()
@@ -392,6 +394,13 @@ watch(
   () => [settings.value.fontSize, settings.value.lineHeight, settings.value.pageMode, settings.value.vertical],
   () => { if (pageEnabled()) nextTick(computePages) }
 )
+// 注音开关：增删自动 ruby，并重算分页
+watch(() => settings.value.furigana, async (on) => {
+  if (!contentEl.value) return
+  if (on) await addFurigana(contentEl.value)
+  else removeFurigana(contentEl.value)
+  if (pageEnabled()) await computePages()
+})
 
 // 首次进入沉浸模式时，短暂提示「点中央可呼出栏」
 const immersiveHint = ref(false)
@@ -432,6 +441,12 @@ watch(() => ui.immersive, (v) => {
         <button class="ghost" title="减小字号" @click="bumpFont(-1)">A−</button>
         <button class="ghost" title="增大字号" @click="bumpFont(1)">A+</button>
         <button class="ghost" title="主题" @click="cycleTheme">◐</button>
+        <button
+          class="ghost"
+          :class="{ on: settings.furigana }"
+          title="汉字注音（自动振假名；EPUB 自带的不变）"
+          @click="settings.furigana = !settings.furigana"
+        >注音</button>
         <button class="ghost" title="竖排 / 横排" @click="settings.vertical = !settings.vertical">
           {{ settings.vertical ? '横排' : '竖排' }}
         </button>
@@ -525,6 +540,7 @@ watch(() => ui.immersive, (v) => {
 }
 .reader-toolbar .ch-title { color: var(--text-dim); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30vw; }
 .reader-toolbar .spacer { flex: 1; }
+.reader-toolbar button.on { color: var(--accent); border-color: var(--accent); }
 
 .reader-scroll { flex: 1; overflow: auto; background: var(--reader-bg); }
 .reader-content {

@@ -25,7 +25,8 @@ const DEFAULT_SETTINGS = {
   theme: 'sepia', // light | sepia | dark
   vertical: false,
   maxWidth: 760,
-  pageMode: false // false=滚动模式；true=分页翻页模式
+  pageMode: false, // false=滚动模式；true=分页翻页模式
+  furigana: false // 给没有注音的汉字自动加振假名（kuromoji）；EPUB 自带注音不受影响
 }
 
 // 非持久化的临时 UI 状态（如沉浸模式收起顶栏）
