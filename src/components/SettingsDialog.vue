@@ -4,6 +4,8 @@ import { settings, MODELS, DEEPSEEK_MODELS } from '../store.js'
 import { testConnection } from '../lib/ai.js'
 import { llmState, loadModel } from '../lib/localllm.js'
 
+const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu
+
 function downloadLLM() {
   loadModel().catch(() => {}) // 错误已反映在 llmState
 }
@@ -128,12 +130,15 @@ function close() {
           <label class="checkbox">
             <input type="checkbox" v-model="settings.localLLM" /> 本地大模型（Qwen2.5-0.5B，词义 / 语法 / 翻译离线）
           </label>
-          <div class="field-hint">勾选后，词义 / 语法 / 翻译改用浏览器内的 Qwen2.5-0.5B（WebGPU 加速）。首次需下载 <b>~483MB</b> 模型（缓存后复用）。质量不及上面的 API，输出为朴素文本。建议配合「本地分词」实现基本离线。</div>
-          <div v-if="settings.localLLM" class="llm-row">
+          <div class="field-hint">勾选后，词义 / 语法 / 翻译改用浏览器内的 Qwen2.5-0.5B（<b>需要 WebGPU</b>，Chrome / Edge 113+）。首次需下载 <b>~483MB</b> 模型（缓存后复用），下载完成后才会启用。质量不及上面的 API，输出为朴素文本。建议配合「本地分词」实现基本离线。</div>
+          <div v-if="settings.localLLM && !hasWebGPU" class="test-msg bad" style="margin-top:6px">
+            你的浏览器不支持 WebGPU，无法运行本地模型。请用 Chrome / Edge 113+ 并启用 WebGPU，或改用上面的 API。
+          </div>
+          <div v-else-if="settings.localLLM" class="llm-row">
             <button v-if="llmState.status !== 'ready'" :disabled="llmState.status === 'loading'" @click="downloadLLM">
               {{ llmState.status === 'loading' ? `下载中… ${llmState.progress}%` : '下载 / 加载模型（~483MB）' }}
             </button>
-            <span v-if="llmState.status === 'ready'" class="test-msg ok">模型已就绪 ✓</span>
+            <span v-if="llmState.status === 'ready'" class="test-msg ok">模型已就绪 ✓，词义/语法/翻译将走本地</span>
             <span v-if="llmState.status === 'error'" class="test-msg bad">{{ llmState.error }}</span>
             <span v-else-if="llmState.status === 'loading' && llmState.file" class="field-hint" style="margin:0">{{ llmState.file }}</span>
           </div>

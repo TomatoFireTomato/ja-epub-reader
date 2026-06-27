@@ -59,16 +59,17 @@ export function loadModel() {
 
 export function llmReady() { return llmState.value.status === 'ready' }
 
-// 生成（自动确保模型已加载）
+// 生成（不自动下载：模型未就绪时明确报错，由用户在设置里显式下载，避免点词时静默拉 483MB 卡住）
 export function llmGenerate(system, user) {
+  if (llmState.value.status !== 'ready') {
+    const msg = llmState.value.status === 'loading'
+      ? `本地模型仍在下载/加载中（${llmState.value.progress || 0}%），请稍候…`
+      : '本地模型未加载。请在「设置 → 本地大模型」里点「下载/加载模型」，完成后再用。'
+    return Promise.reject(new Error(msg))
+  }
   ensureWorker()
   const id = ++reqId
   const p = new Promise((resolve, reject) => pending.set(id, { resolve, reject }))
-  const send = () => worker.postMessage({ type: 'generate', id, system, user })
-  if (llmState.value.status === 'ready') send()
-  else loadModel().then(send).catch((e) => {
-    const r = pending.get(id)
-    if (r) { pending.delete(id); r.reject(e) }
-  })
+  worker.postMessage({ type: 'generate', id, system, user })
   return p
 }
