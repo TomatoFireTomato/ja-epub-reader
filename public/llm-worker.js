@@ -45,7 +45,15 @@ async function generate(system, user, id) {
       { role: 'system', content: system || '' },
       { role: 'user', content: user || '' }
     ]
-    const out = await gen(messages, { max_new_tokens: 200, do_sample: false })
+    // 小模型贪心解码易复读：用轻采样 + 重复惩罚 + 禁止重复 n-gram，抑制「南南南…」式退化
+    const out = await gen(messages, {
+      max_new_tokens: 220,
+      do_sample: true,
+      temperature: 0.7,
+      top_p: 0.85,
+      repetition_penalty: 1.3,
+      no_repeat_ngram_size: 3
+    })
     let text = ''
     const g = out && out[0] && out[0].generated_text
     if (Array.isArray(g)) text = (g[g.length - 1] && g[g.length - 1].content) || ''
