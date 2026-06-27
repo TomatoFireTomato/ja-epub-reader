@@ -116,7 +116,7 @@ function close() {
           <label class="checkbox">
             <input type="checkbox" v-model="settings.localSegment" /> 本地分词（kuromoji，离线、零 token）
           </label>
-          <div class="field-hint">分词在浏览器本地完成，不花 token、可离线（首次加载 ~12MB 词典并缓存）。会区分<b>单词</b>与<b>助词/助动词（语法成分）</b>；但识别不了 ～ている 这类跨多词句型。词义 / 语法 / 翻译仍按上面所选 AI 方式。</div>
+          <div class="field-hint">分词在浏览器本地完成，不花 token、可离线（首次加载 ~12MB 词典并缓存）。给出<b>单词</b>，并用句型匹配识别<b>常见语法</b>（～ている、～なければならない 等，自带中文解释，点开即看）。单词的词义 / 整句翻译仍按上面所选 AI 方式。</div>
         </div>
       </section>
 

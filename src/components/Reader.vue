@@ -271,7 +271,7 @@ async function selectSentence(sentence) {
       surface: w.surface || '', reading: w.reading || '', pos: w.pos || '',
       detail: null, loading: false, error: ''
     }))
-    sel.grammar = (r.grammar || []).map((g) => ({ point: g.point || '', detail: null, loading: false, error: '' }))
+    sel.grammar = (r.grammar || []).map((g) => ({ point: g.point || '', detail: g.detail || null, loading: false, error: '' }))
   } catch (err) {
     if (id !== segId) return
     sel.error = err.message || String(err)
