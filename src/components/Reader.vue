@@ -460,10 +460,10 @@ watch(() => ui.immersive, (v) => {
         </div>
       </div>
 
-      <!-- 分页模式：左右翻页按钮 + 页码 -->
+      <!-- 分页模式：左右翻页按钮 + 页码（用 prev/next 避免与解析抽屉的 .right 撞名） -->
       <template v-if="pageEnabled()">
-        <button class="page-edge left" title="上一页" @click="prevPage">‹</button>
-        <button class="page-edge right" title="下一页" @click="nextPage">›</button>
+        <button class="page-edge prev" title="上一页" @click="prevPage">‹</button>
+        <button class="page-edge next" title="下一页" @click="nextPage">›</button>
         <div class="page-indicator">{{ pageIndex + 1 }} / {{ pageCount }}</div>
       </template>
     </section>
@@ -547,8 +547,8 @@ watch(() => ui.immersive, (v) => {
   opacity: 0.32; font-size: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.12); z-index: 5;
 }
 .page-edge:hover { opacity: 0.9; border-color: var(--accent); }
-.page-edge.left { left: 6px; }
-.page-edge.right { right: 6px; }
+.page-edge.prev { left: 6px; }
+.page-edge.next { right: 6px; }
 .page-indicator {
   position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
   color: var(--text-dim); font-size: 12px; background: var(--reader-bg);
