@@ -9,7 +9,6 @@ import SettingsDialog from './components/SettingsDialog.vue'
 
 const book = shallowRef(null) // 解析后的书对象
 const meta = ref(null) // { id, openedAt, lastIndex, lastScroll, title, creator }
-const showSettings = ref(false)
 const loading = ref(false)
 const error = ref('')
 
@@ -66,17 +65,16 @@ function onProgress(patch) {
 </script>
 
 <template>
-  <div class="app" :class="{ immersive: ui.immersive && book }" :data-theme="settings.theme">
-    <header v-show="!(ui.immersive && book)" class="topbar">
+  <div class="app" :data-theme="settings.theme">
+    <!-- 顶栏仅在书库页显示；阅读时只有一层阅读工具栏 -->
+    <header v-show="!book" class="topbar">
       <span class="brand">📖<span class="brand-text"> 日语小说阅读器</span></span>
-      <span v-if="book" class="book-title">· {{ book.title }}</span>
       <span class="spacer" />
-      <button v-if="book" class="ghost" @click="closeBook">← 书库</button>
-      <button class="ghost" @click="showSettings = true">⚙️ 设置</button>
+      <button class="ghost" @click="ui.showSettings = true">⚙️ 设置</button>
     </header>
 
     <!-- 沉浸模式下的浮动恢复按钮 -->
-    <button v-if="ui.immersive && book" class="immersive-restore" title="显示顶栏" @click="ui.immersive = false">⌄</button>
+    <button v-if="ui.immersive && book" class="immersive-restore" title="显示工具栏" @click="ui.immersive = false">⌄</button>
 
     <main class="main">
       <Reader
@@ -84,6 +82,7 @@ function onProgress(patch) {
         :book="book"
         :meta="meta"
         @progress="onProgress"
+        @close="closeBook"
       />
       <Library
         v-else
@@ -94,6 +93,6 @@ function onProgress(patch) {
       />
     </main>
 
-    <SettingsDialog v-model:open="showSettings" />
+    <SettingsDialog v-model:open="ui.showSettings" />
   </div>
 </template>

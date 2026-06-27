@@ -14,7 +14,10 @@ const props = defineProps({
   book: { type: Object, required: true },
   meta: { type: Object, default: null }
 })
-const emit = defineEmits(['progress'])
+const emit = defineEmits(['progress', 'close'])
+
+const showView = ref(false) // 「Aa」视图选项弹出菜单
+const themeLabel = computed(() => ({ light: '明亮', sepia: '护眼', dark: '夜间' }[settings.value.theme] || settings.value.theme))
 
 const scrollEl = ref(null)
 const contentEl = ref(null)
@@ -327,7 +330,7 @@ function cycleTheme() {
 
 // 键盘翻页 / Esc 关气泡（分页模式翻页，滚动模式翻章）
 function onKey(e) {
-  if (e.key === 'Escape') { hideBubble(); return }
+  if (e.key === 'Escape') { hideBubble(); showView.value = false; return }
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
   const fwd = e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' '
   const back = e.key === 'ArrowLeft' || e.key === 'PageUp'
@@ -360,8 +363,10 @@ function onResize() {
 
 // 点击气泡与正文之外的地方 → 关掉气泡
 function onDocPointerDown(e) {
-  if (!bubble.show) return
   const t = e.target
+  // 点 Aa 菜单之外 → 关菜单
+  if (showView.value && !(t.closest && t.closest('.view-wrap'))) showView.value = false
+  if (!bubble.show) return
   if (t.closest && t.closest('.seg-bubble')) return
   if (contentEl.value && contentEl.value.contains(t)) return
   hideBubble()
@@ -420,6 +425,7 @@ watch(() => ui.immersive, (v) => {
   <div class="reader" :class="{ 'panel-open': showPanel }">
     <!-- 目录 -->
     <aside v-show="showToc" class="toc scrollbar-thin">
+      <button class="toc-back ghost" @click="emit('close')">← 书库</button>
       <div class="toc-head">目录</div>
       <button
         v-for="item in book.toc"
@@ -432,29 +438,33 @@ watch(() => ui.immersive, (v) => {
 
     <!-- 阅读区 -->
     <section class="center">
+      <!-- 单层工具栏：核心控制；排版选项收进 Aa 菜单 -->
       <div v-show="!ui.immersive" class="reader-toolbar">
-        <button class="ghost" title="目录" @click="showToc = !showToc">☰</button>
-        <button class="ghost" title="上一章" :disabled="currentIndex === 0" @click="prevChapter">‹</button>
-        <button class="ghost" title="下一章" :disabled="currentIndex === book.spine.length - 1" @click="nextChapter">›</button>
+        <button class="ghost" title="目录 / 书库" @click="showToc = !showToc">☰</button>
+        <button class="ghost ch-nav" title="上一章" :disabled="currentIndex === 0" @click="prevChapter">‹</button>
+        <button class="ghost ch-nav" title="下一章" :disabled="currentIndex === book.spine.length - 1" @click="nextChapter">›</button>
         <span class="ch-title">{{ chapterTitle || `第 ${currentIndex + 1} 节` }}</span>
         <span class="spacer" />
-        <button class="ghost" title="减小字号" @click="bumpFont(-1)">A−</button>
-        <button class="ghost" title="增大字号" @click="bumpFont(1)">A+</button>
-        <button class="ghost" title="主题" @click="cycleTheme">◐</button>
-        <button
-          class="ghost"
-          :class="{ on: settings.furigana }"
-          title="汉字注音（自动振假名；EPUB 自带的不变）"
-          @click="settings.furigana = !settings.furigana"
-        >注音</button>
-        <button class="ghost" title="竖排 / 横排" @click="settings.vertical = !settings.vertical">
-          {{ settings.vertical ? '横排' : '竖排' }}
-        </button>
-        <button class="ghost" :title="settings.pageMode ? '切换到滚动模式' : '切换到分页模式'" @click="togglePageMode">
-          {{ settings.pageMode ? '滚动' : '分页' }}
-        </button>
+        <div class="view-wrap">
+          <button class="ghost" :class="{ on: showView }" title="字号 / 排版 / 显示" @click.stop="showView = !showView">Aa ▾</button>
+          <div v-if="showView" class="view-menu" @click.stop>
+            <div class="vm-row">
+              <span>字号</span>
+              <span class="vm-ctrl">
+                <button @click="bumpFont(-1)">A−</button>
+                <b>{{ settings.fontSize }}</b>
+                <button @click="bumpFont(1)">A+</button>
+              </span>
+            </div>
+            <button class="vm-item" @click="cycleTheme"><span>主题</span><span class="vm-val">{{ themeLabel }}</span></button>
+            <button class="vm-item" :class="{ on: settings.furigana }" @click="settings.furigana = !settings.furigana"><span>汉字注音</span><span class="vm-val">{{ settings.furigana ? '开' : '关' }}</span></button>
+            <button class="vm-item" :class="{ on: settings.vertical }" @click="settings.vertical = !settings.vertical"><span>竖排（纵书）</span><span class="vm-val">{{ settings.vertical ? '开' : '关' }}</span></button>
+            <button class="vm-item" :class="{ on: settings.pageMode }" @click="togglePageMode"><span>分页翻页</span><span class="vm-val">{{ settings.pageMode ? '开' : '关' }}</span></button>
+            <button class="vm-item" @click="ui.showSettings = true; showView = false"><span>更多设置…</span></button>
+          </div>
+        </div>
         <button class="ghost" title="解析面板" @click="showPanel = !showPanel">🔍</button>
-        <button class="ghost" title="沉浸阅读（收起顶栏）" @click="ui.immersive = true">⤢</button>
+        <button class="ghost" title="沉浸（收起工具栏）" @click="ui.immersive = true">⤢</button>
       </div>
 
       <div
@@ -541,6 +551,32 @@ watch(() => ui.immersive, (v) => {
 .reader-toolbar .ch-title { color: var(--text-dim); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30vw; }
 .reader-toolbar .spacer { flex: 1; }
 .reader-toolbar button.on { color: var(--accent); border-color: var(--accent); }
+
+/* Aa 视图选项弹出菜单 */
+.view-wrap { position: relative; }
+.view-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+  width: 220px; max-width: 80vw; padding: 6px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); animation: fade 0.14s ease;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.vm-row, .vm-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 10px; border-radius: 8px; border: none; background: transparent;
+  color: var(--text); font: inherit; text-align: left; width: 100%; cursor: pointer;
+}
+.vm-item:hover { background: var(--panel-2); }
+.vm-item.on { color: var(--accent); }
+.vm-val { color: var(--text-dim); font-size: 13px; }
+.vm-item.on .vm-val { color: var(--accent); }
+.vm-ctrl { display: inline-flex; align-items: center; gap: 8px; }
+.vm-ctrl button { padding: 4px 10px; }
+.vm-ctrl b { min-width: 28px; text-align: center; color: var(--text-dim); font-weight: 600; }
+
+/* 目录抽屉里的「书库」返回 */
+.toc-back { text-align: left; padding: 8px 10px; border-radius: 6px; color: var(--text-dim); margin-bottom: 4px; }
+.toc-back:hover { background: var(--accent-soft); color: var(--accent); }
 
 .reader-scroll { flex: 1; overflow: auto; background: var(--reader-bg); }
 .reader-content {
@@ -631,12 +667,10 @@ watch(() => ui.immersive, (v) => {
   }
   .reader-content { padding: 24px 16px 20px; }
   .reader-scroll.vertical .reader-content { padding: 20px 24px; }
-  /* 工具栏按钮较多：隐藏标题、紧凑排布，必要时可横向滑动，避免换行破版 */
-  .reader-toolbar { gap: 2px; padding: 6px 6px; flex-wrap: nowrap; overflow-x: auto; }
-  .reader-toolbar::-webkit-scrollbar { display: none; }
+  /* 合并成单层后按钮不多：紧凑排布、隐藏标题；保留 spacer 让右侧按钮(含 Aa 菜单)靠右 */
+  .reader-toolbar { gap: 3px; padding: 6px 8px; flex-wrap: nowrap; }
   .reader-toolbar .ch-title { display: none; }
-  .reader-toolbar .spacer { display: none; }
-  .reader-toolbar button { padding: 6px 8px; }
+  .reader-toolbar button { padding: 6px 9px; }
   .chapter-nav { padding: 18px; gap: 12px; }
   .page-edge { width: 36px; height: 72px; font-size: 20px; }
 }

@@ -29,8 +29,8 @@ const DEFAULT_SETTINGS = {
   furigana: false // 给没有注音的汉字自动加振假名（kuromoji）；EPUB 自带注音不受影响
 }
 
-// 非持久化的临时 UI 状态（如沉浸模式收起顶栏）
-export const ui = reactive({ immersive: false })
+// 非持久化的临时 UI 状态（沉浸模式、设置弹窗）
+export const ui = reactive({ immersive: false, showSettings: false })
 
 export const MODELS = [
   { value: 'claude-opus-4-8', label: 'Opus 4.8（最强，较慢）' },
