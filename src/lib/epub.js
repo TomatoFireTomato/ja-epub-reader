@@ -112,29 +112,79 @@ export async function parseEpub(input) {
 // ---------- 目录（TOC） ----------
 async function buildToc(book, opf, pathToIndex) {
   const { manifest, opfDir } = book
+  let primary = []
   // EPUB3：manifest 中 properties 含 nav 的项
   let navId = null
   for (const id in manifest) {
     if (/\bnav\b/.test(manifest[id].properties)) { navId = id; break }
   }
   if (navId) {
-    try { return await tocFromNav(book, resolvePath(opfDir, manifest[navId].href), pathToIndex) }
+    try { primary = await tocFromNav(book, resolvePath(opfDir, manifest[navId].href), pathToIndex) }
     catch { /* 回退到 ncx */ }
   }
   // EPUB2：ncx
-  const spineEl = els(opf, 'spine')[0]
-  let ncxId = spineEl && spineEl.getAttribute('toc')
-  if (!ncxId) {
-    for (const id in manifest) {
-      if (manifest[id].type === 'application/x-dtbncx+xml') { ncxId = id; break }
+  if (!primary.length) {
+    const spineEl = els(opf, 'spine')[0]
+    let ncxId = spineEl && spineEl.getAttribute('toc')
+    if (!ncxId) {
+      for (const id in manifest) {
+        if (manifest[id].type === 'application/x-dtbncx+xml') { ncxId = id; break }
+      }
+    }
+    if (ncxId && manifest[ncxId]) {
+      try { primary = await tocFromNcx(book, resolvePath(opfDir, manifest[ncxId].href), pathToIndex) }
+      catch { /* 回退到 spine */ }
     }
   }
-  if (ncxId && manifest[ncxId]) {
-    try { return await tocFromNcx(book, resolvePath(opfDir, manifest[ncxId].href), pathToIndex) }
-    catch { /* 回退到 spine */ }
-  }
+  // 有些书的 nav/ncx 偷懒（只列「目次/奥付」），真正的章节列在书内的「目次」页里。
+  // 主目录明显稀疏时，解析那一页的链接来补全。
+  const enriched = await tocFromContentsPage(book, opf, pathToIndex, primary)
+  if (enriched && enriched.length > primary.length) primary = enriched
+
+  if (primary.length) return primary
   // 兜底：用 spine 顺序生成目录
   return book.spine.map((id, i) => ({ label: '第 ' + (i + 1) + ' 节', index: i, anchor: '' }))
+}
+
+// 当 nav/ncx 目录稀疏时，尝试用书内「目次」页（含章节链接）补全；并保留主目录里的额外项（如奥付）
+async function tocFromContentsPage(book, opf, pathToIndex, primary) {
+  if (primary.length >= Math.max(3, Math.ceil(book.spine.length * 0.4))) return null // 主目录已够丰富，不动它
+  // 找「目次」页所在的 spine 索引：① OPF guide 中 type 含 toc 的 reference ② 主目录里标签像「目次」的项
+  const candidates = []
+  const guide = els(opf, 'guide')[0]
+  if (guide) for (const ref of els(guide, 'reference')) {
+    if (/toc|contents/i.test(ref.getAttribute('type') || '')) {
+      const idx = lookupIndex(pathToIndex, resolvePath(book.opfDir, ref.getAttribute('href') || ''))
+      if (idx != null) candidates.push(idx)
+    }
+  }
+  const TOC_LABEL = /目次|目录|目錄|もくじ|contents|table of contents/i
+  for (const e of primary) if (TOC_LABEL.test(e.label)) candidates.push(e.index)
+
+  for (const idx of [...new Set(candidates)]) {
+    try {
+      const pagePath = resolvePath(book.opfDir, manifestHref(book, idx))
+      const pageDir = dirname(pagePath)
+      const doc = new DOMParser().parseFromString(await readText(book.zip, pagePath), 'text/html')
+      const out = []
+      for (const a of doc.querySelectorAll('a[href]')) {
+        const href = a.getAttribute('href')
+        const tIndex = lookupIndex(pathToIndex, resolvePath(pageDir, href))
+        if (tIndex != null) out.push({ label: (a.textContent || '').trim() || '（无标题）', index: tIndex, anchor: hashOf(href) })
+      }
+      const page = dedupeToc(out)
+      if (page.length <= primary.length) continue
+      // 合并：以「目次」页为主，补上主目录里它没有的项（如奥付），按 spine 顺序排列
+      const byIndex = new Map()
+      for (const e of [...page, ...primary]) if (!byIndex.has(e.index)) byIndex.set(e.index, e)
+      return [...byIndex.values()].sort((a, b) => a.index - b.index)
+    } catch { /* 试下一个候选 */ }
+  }
+  return null
+}
+
+function manifestHref(book, spineIndex) {
+  return book.manifest[book.spine[spineIndex]].href
 }
 
 // 取 href 中的锚点（# 后面的部分），用于章节内定位
