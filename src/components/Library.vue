@@ -48,8 +48,8 @@ function fmtDate(ts) {
 <template>
   <div class="library scrollbar-thin">
     <div class="hero">
-      <h1>日语小说阅读器</h1>
-      <p class="sub">导入本地 EPUB，阅读时点击句子，让 Claude 拆解语法与单词。</p>
+      <h1>外语小说阅读器</h1>
+      <p class="sub">导入本地 EPUB（日文 / 英文），阅读时点击句子，让 AI 拆解语法与单词。</p>
 
       <div
         class="dropzone"

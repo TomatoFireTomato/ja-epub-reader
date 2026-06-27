@@ -44,8 +44,8 @@ function close() {
           <label class="mode" :class="{ active: settings.mode === 'local' }">
             <input type="radio" value="local" v-model="settings.mode" />
             <div>
-              <div class="mode-title">本地 Claude Code（订阅额度）</div>
-              <div class="mode-desc">用你的 Claude 订阅，无需 API Key。需先运行 <code>npm run server</code>，且本机已安装并登录 Claude Code。</div>
+              <div class="mode-title">本地命令行大模型（订阅额度）</div>
+              <div class="mode-desc">用本机命令行大模型的订阅额度，无需 API Key（当前支持 Claude Code CLI）。需先运行 <code>npm run server</code>，且本机已安装并登录对应 CLI。</div>
             </div>
           </label>
           <label class="mode" :class="{ active: settings.mode === 'apikey' }">

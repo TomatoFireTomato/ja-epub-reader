@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "日语 EPUB 小说阅读器，点击句子即可用 Claude 解析语法与单词",
+  "description": "外语（日/英）EPUB 小说阅读器，点击句子即可用大模型解析语法与单词",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

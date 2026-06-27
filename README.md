@@ -1,8 +1,8 @@
-# 日语小说阅读器 · AI 句子解析
+# 外语小说阅读器 · AI 句子解析
 
-一个用来阅读**日语 EPUB 小说**的网页阅读器。阅读时**点击任意一句**，Claude 会自动解析这句话的结构，把里面的**语法、单词**拆开，给出**读音、词性、释义和整句翻译**。
+一个用来阅读**日语 / 英语 EPUB 小说**的网页阅读器。阅读时**点击任意一句**，大模型会自动解析这句话的结构，把里面的**语法、单词**拆开，给出**读音、词性、释义和整句翻译**（自动判断日 / 英）。
 
-![flow](https://img.shields.io/badge/Vue3-Vite-42b883) ![ai](https://img.shields.io/badge/AI-Claude-6d4aff)
+![flow](https://img.shields.io/badge/Vue3-Vite-42b883) ![ai](https://img.shields.io/badge/AI-LLM-6d4aff)
 
 ## 在线体验
 
@@ -24,8 +24,8 @@
 
 打开右上角 **⚙️ 设置** 选择：
 
-### 1. 本地 Claude Code（使用订阅额度，推荐）
-用你已有的 **Claude 订阅**额度，不额外按量付费。原理是本地起一个小服务，把句子转发给你本机的 `claude` 命令。
+### 1. 本地命令行大模型（使用订阅额度，推荐）
+用你已有的命令行大模型**订阅**额度，不额外按量付费。原理是本地起一个小服务，把句子转发给本机的命令行工具（当前支持 Claude Code 的 `claude` 命令）。
 
 前置条件：已安装 [Claude Code](https://docs.claude.com/claude-code) 并登录（`claude` 命令可用）。
 

@@ -87,7 +87,7 @@ async function completeDeepSeek(system, user, cfg) {
   return data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content
 }
 
-// 本地 Claude Code 服务（订阅额度）
+// 本地命令行大模型服务（订阅额度，当前支持 Claude Code CLI）
 async function completeLocal(system, user, cfg) {
   let res
   try {
@@ -194,7 +194,7 @@ export async function testConnection() {
       throw new Error('连不到后端（' + (base || '本机 /api') + '）。本地用先跑 `npm run server`；上线用请填写后端地址。')
     }
     const data = await res.json()
-    if (!data.claude) throw new Error('后端在线，但未检测到 claude 命令，请确认该机器已安装 Claude Code 并登录订阅')
+    if (!data.claude) throw new Error('后端在线，但未检测到命令行大模型（claude 命令）。请确认该机器已安装并登录对应 CLI（当前支持 Claude Code）')
     const t = (cfg.serverToken || '').trim()
     if (t) {
       const pong = await fetch(base + '/api/ping', { headers: localHeaders() }).catch(() => null)

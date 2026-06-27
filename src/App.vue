@@ -68,7 +68,7 @@ function onProgress(patch) {
   <div class="app" :data-theme="settings.theme">
     <!-- 顶栏仅在书库页显示；阅读时只有一层阅读工具栏 -->
     <header v-show="!book" class="topbar">
-      <span class="brand">📖<span class="brand-text"> 日语小说阅读器</span></span>
+      <span class="brand">📖<span class="brand-text"> 外语小说阅读器</span></span>
       <span class="spacer" />
       <button class="ghost" @click="ui.showSettings = true">⚙️ 设置</button>
     </header>
