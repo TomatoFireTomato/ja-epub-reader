@@ -279,7 +279,10 @@ function clearSelection() {
 }
 
 // 第一步：分词 + 语法点识别（小请求，省 token）。只填气泡，不开抽屉
-async function selectSentence(sentence) {
+async function selectSentence(rawSentence) {
+  // 防御：手动拖选一大段、或整段没识别到句末标点时，句子可能极长 →
+  // 分词后会产生海量词条把页面卡死。这里硬性截断（正常单句远小于此）。
+  const sentence = rawSentence.length > 500 ? rawSentence.slice(0, 500) : rawSentence
   // 同一句已分词过：直接复用缓存（气泡已由 openBubble 弹出），不重复请求
   if (sentence === sel.sentence && !sel.error && (sel.words.length || sel.grammar.length)) {
     return

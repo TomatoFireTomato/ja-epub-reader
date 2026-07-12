@@ -42,7 +42,9 @@ export async function segmentLocal(sentence) {
   const tokens = tk.tokenize(sentence)
   const words = []
   const seenW = new Set()
+  const MAX_WORDS = 150 // 防御：极端长句时截断词条数，避免渲染卡死
   for (const t of tokens) {
+    if (words.length >= MAX_WORDS) break
     if (t.pos === '記号' || t.pos === '助詞' || t.pos === '助動詞') continue // 标点、助词、助动词不作为单词
     const surface = t.surface_form
     if (!surface || !surface.trim()) continue

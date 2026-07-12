@@ -126,6 +126,7 @@ function segmentLocalEn(sentence) {
   const words = []
   const seen = new Set()
   for (const m of sentence.matchAll(/[A-Za-z]+(?:['’][A-Za-z]+)?/g)) {
+    if (words.length >= 150) break // 防御：极端长句时截断词条数，避免渲染卡死
     const w = m[0]
     const key = w.toLowerCase()
     if (seen.has(key)) continue

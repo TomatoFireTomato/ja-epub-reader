@@ -1,9 +1,13 @@
 // 断句（中日 / 英文）+ 把点击位置映射成「整句」DOM Range 的工具集合。
 
-const TERMINATORS = new Set(['。', '．', '！', '？', '!', '?', '…', '‥', '\n'])
+const TERMINATORS = new Set(['。', '｡', '．', '！', '？', '!', '?', '…', '‥', '\n'])
 const CLOSERS = new Set([
-  '」', '』', '）', ')', '】', '〉', '》', '”', '’', '〕', '］', ']', '｝', '}', '"', '\''
+  '」', '』', '）', ')', '】', '〉', '》', '”', '’', '〕', '］', ']', '｝', '}', '"', '\'', '｣', '｠'
 ])
+
+// 单句最大长度（字符）。超过多半是没识别到句末标点或整段被当成一句，
+// 截断以防分词后产生海量词条把页面卡死。
+const MAX_SENTENCE = 400
 
 // 判断文本语言：有假名（或仅汉字）→ 'ja'；没有 CJK 但有拉丁字母 → 'en'；否则按 'ja'。
 // 面向「中文用户读外文」，纯中文书少见，故汉字也归 ja（提示语对中文也能用）。
@@ -85,6 +89,19 @@ export function sentenceAt(text, index) {
   let [a, b] = chosen
   while (a < b && /\s/.test(text[a])) a++
   while (b > a && /\s/.test(text[b - 1])) b--
+  // 句子异常长（没识别到句末标点/整段被当成一句）→ 收敛到点击处附近的窗口，
+  // 尽量在次级停顿（、，,；;：: 空白）处切，避免整段进入分词导致卡死。
+  if (b - a > MAX_SENTENCE) {
+    const half = Math.floor(MAX_SENTENCE / 2)
+    let ns = Math.max(a, index - half)
+    let ne = Math.min(b, index + half)
+    const SECONDARY = /[、，,；;：:\s]/
+    for (let i = index - 1; i >= ns; i--) { if (SECONDARY.test(text[i])) { ns = i + 1; break } }
+    for (let i = index; i < ne; i++) { if (SECONDARY.test(text[i])) { ne = i + 1; break } }
+    a = ns; b = ne
+    while (a < b && /\s/.test(text[a])) a++
+    while (b > a && /\s/.test(text[b - 1])) b--
+  }
   return a < b ? [a, b] : null
 }
 
