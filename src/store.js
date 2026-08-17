@@ -4,8 +4,12 @@ import { ref, reactive, watch } from 'vue'
 
 const SETTINGS_KEY = 'ja-reader-settings'
 const VOCAB_KEY = 'ja-reader-vocab'
+// v2：旧版可能持久化“整章自动注音”，导致移动端再次打开仍卡死。
+// 升级时只重置相关显示选项，保留 API Key、生词本、书籍和阅读进度。
+const SETTINGS_VERSION = 2
 
 const DEFAULT_SETTINGS = {
+  settingsVersion: SETTINGS_VERSION,
   mode: 'local', // 'local'（订阅额度）| 'apikey'（Anthropic）| 'deepseek'
   apiKey: '',
   baseUrl: '',
@@ -58,7 +62,19 @@ function save(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)) } catch { /* 忽略配额错误 */ }
 }
 
-export const settings = ref(load(SETTINGS_KEY, DEFAULT_SETTINGS))
+function loadSettings() {
+  const value = load(SETTINGS_KEY, DEFAULT_SETTINGS)
+  if ((Number(value.settingsVersion) || 0) < SETTINGS_VERSION) {
+    value.furigana = false
+    value.pageMode = false
+    value.settingsVersion = SETTINGS_VERSION
+    // 立即写回，确保迁移只运行一次；不必等 Vue watch 首次触发。
+    save(SETTINGS_KEY, value)
+  }
+  return value
+}
+
+export const settings = ref(loadSettings())
 watch(settings, (v) => save(SETTINGS_KEY, v), { deep: true })
 
 export const vocab = ref(load(VOCAB_KEY, []))
