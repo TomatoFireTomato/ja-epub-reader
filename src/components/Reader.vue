@@ -111,9 +111,22 @@ async function computePages() {
   pageIndex.value = Math.max(0, Math.min(pageIndex.value, pageCount.value - 1))
 }
 
+// 自动注音只在分页模式工作，并且每次只处理当前可见页。已经处理过的页
+// 保留 ruby 作为缓存；后续翻回该页时不会重复分词。
+async function annotateCurrentPage() {
+  if (!pageEnabled() || !settings.value.furigana) return
+  const content = contentEl.value
+  const viewport = scrollEl.value
+  if (!content || !viewport) return
+  await nextTick()
+  await addFurigana(content, viewport)
+  if (pageEnabled()) await computePages()
+}
+
 function goPage(i) {
   pageIndex.value = Math.max(0, Math.min(i, pageCount.value - 1))
   saveProgress()
+  annotateCurrentPage()
 }
 function nextPage() {
   hideBubble()
@@ -126,9 +139,16 @@ function prevPage() {
   else if (currentIndex.value > 0) loadChapter(currentIndex.value - 1, false, 'last')
 }
 function togglePageMode() {
-  settings.value.pageMode = !settings.value.pageMode
+  const on = !settings.value.pageMode
+  settings.value.pageMode = on
+  // 注音是分页专属能力；退出分页时同步关闭并清理已生成的 ruby。
+  if (!on && settings.value.furigana) settings.value.furigana = false
   clearSelection()
-  nextTick(() => { pageIndex.value = 0; computePages() })
+  nextTick(async () => {
+    pageIndex.value = 0
+    await computePages()
+    if (on) await annotateCurrentPage()
+  })
 }
 
 // ---------- 章节加载 ----------
@@ -142,14 +162,16 @@ async function loadChapter(index, restore = false, landing = 'start', anchor = '
     chapterTitle.value = title
     currentIndex.value = index
     await nextTick()
-    if (settings.value.furigana && contentEl.value) await addFurigana(contentEl.value)
     if (pageEnabled()) {
       pageIndex.value = 0
       await computePages()
       if (anchor && scrollToAnchor(anchor)) { /* 已定位到锚点所在页 */ }
       else if (landing === 'last') pageIndex.value = pageCount.value - 1
       else if (restore && props.meta) pageIndex.value = Math.min(props.meta.lastPage || 0, pageCount.value - 1)
+      await annotateCurrentPage()
     } else {
+      // 兼容旧版本 localStorage 中“滚动模式 + 注音开启”的组合。
+      if (settings.value.furigana) settings.value.furigana = false
       scrollEl.value.scrollTop = 0
       scrollEl.value.scrollLeft = settings.value.vertical ? scrollEl.value.scrollWidth : 0
       if (anchor && scrollToAnchor(anchor)) { /* 已滚到锚点 */ }
@@ -418,7 +440,11 @@ onBeforeUnmount(() => {
   if (ro) ro.disconnect()
 })
 
-watch(() => settings.value.vertical, () => nextTick(saveProgress))
+watch(() => settings.value.vertical, (vertical) => {
+  // 竖排不使用横向多列分页；切入竖排时关闭分页专属注音。
+  if (vertical && settings.value.furigana) settings.value.furigana = false
+  nextTick(saveProgress)
+})
 // 字号 / 行距 / 分页 / 竖排 改变 → 重新计算分页
 watch(
   () => [settings.value.fontSize, settings.value.lineHeight, settings.value.pageMode, settings.value.vertical],
@@ -427,7 +453,11 @@ watch(
 // 注音开关：增删自动 ruby，并重算分页
 watch(() => settings.value.furigana, async (on) => {
   if (!contentEl.value) return
-  if (on) await addFurigana(contentEl.value)
+  if (on && !pageEnabled()) {
+    settings.value.furigana = false
+    return
+  }
+  if (on) await annotateCurrentPage()
   else removeFurigana(contentEl.value)
   if (pageEnabled()) await computePages()
 })
@@ -482,7 +512,13 @@ watch(() => ui.immersive, (v) => {
               </span>
             </div>
             <button class="vm-item" @click="cycleTheme"><span>主题</span><span class="vm-val">{{ themeLabel }}</span></button>
-            <button class="vm-item" :class="{ on: settings.furigana }" @click="settings.furigana = !settings.furigana"><span>汉字注音</span><span class="vm-val">{{ settings.furigana ? '开' : '关' }}</span></button>
+            <button
+              class="vm-item"
+              :class="{ on: settings.furigana }"
+              :disabled="!pageEnabled()"
+              :title="pageEnabled() ? '只为当前页生成注音' : '请先关闭竖排并开启分页翻页'"
+              @click="settings.furigana = !settings.furigana"
+            ><span>汉字注音</span><span class="vm-val">{{ pageEnabled() ? (settings.furigana ? '开' : '关') : '仅分页' }}</span></button>
             <button class="vm-item" :class="{ on: settings.vertical }" @click="settings.vertical = !settings.vertical"><span>竖排（纵书）</span><span class="vm-val">{{ settings.vertical ? '开' : '关' }}</span></button>
             <button class="vm-item" :class="{ on: settings.pageMode }" @click="togglePageMode"><span>分页翻页</span><span class="vm-val">{{ settings.pageMode ? '开' : '关' }}</span></button>
             <button class="vm-item" @click="ui.showSettings = true; showView = false"><span>更多设置…</span></button>
@@ -593,6 +629,7 @@ watch(() => ui.immersive, (v) => {
 }
 .vm-item:hover { background: var(--panel-2); }
 .vm-item.on { color: var(--accent); }
+.vm-item:disabled { opacity: 0.55; cursor: not-allowed; }
 .vm-val { color: var(--text-dim); font-size: 13px; }
 .vm-item.on .vm-val { color: var(--accent); }
 .vm-ctrl { display: inline-flex; align-items: center; gap: 8px; }

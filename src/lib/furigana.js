@@ -27,6 +27,37 @@ function rubyParts(surface, reading) {
 }
 
 const SKIP = new Set(['RUBY', 'RT', 'RP', 'SCRIPT', 'STYLE'])
+const taskVersions = new WeakMap()
+
+function nextTaskVersion(root) {
+  const version = (taskVersions.get(root) || 0) + 1
+  taskVersions.set(root, version)
+  return version
+}
+
+function isCurrentTask(root, version) {
+  return taskVersions.get(root) === version
+}
+
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve))
+}
+
+// CSS 多列分页并不会把每页拆成独立 DOM，因此用文本 Range 的实际位置
+// 判断它是否落在当前阅读视口中。这里只决定候选节点，不做分词。
+function isVisibleTextNode(node, viewportRect) {
+  const range = document.createRange()
+  range.selectNodeContents(node)
+  const rects = range.getClientRects()
+  range.detach?.()
+  for (const rect of rects) {
+    if (
+      rect.right > viewportRect.left && rect.left < viewportRect.right &&
+      rect.bottom > viewportRect.top && rect.top < viewportRect.bottom
+    ) return true
+  }
+  return false
+}
 
 function buildFragment(tokenizer, text) {
   const tokens = tokenizer.tokenize(text)
@@ -55,11 +86,14 @@ function buildFragment(tokenizer, text) {
   return changed ? frag : null
 }
 
-export async function addFurigana(root) {
-  if (!root) return
-  if (root.querySelector('ruby.auto-ruby')) return // 已加过
+export async function addFurigana(root, viewport) {
+  if (!root || !viewport) return
+  const version = nextTaskVersion(root)
   const tk = await preloadTokenizer()
-  // 收集含汉字、且不在 ruby/script 内的文本节点
+  if (!isCurrentTask(root, version)) return
+
+  // 只收集当前分页视口内含汉字、且不在 ruby/script 内的文本节点。
+  // 分批扫描并主动让出主线程，长章节也不会阻塞页面交互。
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(n) {
       if (!n.nodeValue || !hasKanji(n.nodeValue)) return NodeFilter.FILTER_REJECT
@@ -72,20 +106,36 @@ export async function addFurigana(root) {
     }
   })
   const nodes = []
+  const viewportRect = viewport.getBoundingClientRect()
   let nd
-  while ((nd = walker.nextNode())) nodes.push(nd)
-  for (const node of nodes) {
+  let scanned = 0
+  while ((nd = walker.nextNode())) {
+    if (isVisibleTextNode(nd, viewportRect)) nodes.push(nd)
+    if (++scanned % 80 === 0) {
+      await nextFrame()
+      if (!isCurrentTask(root, version)) return
+    }
+  }
+
+  // Kuromoji 分词和 ruby DOM 替换也分批执行。翻页或关闭注音时，旧任务
+  // 会因 version 变化而尽快退出。
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i]
     const frag = buildFragment(tk, node.nodeValue)
     if (frag && node.parentNode) node.parentNode.replaceChild(frag, node)
+    if ((i + 1) % 20 === 0) {
+      await nextFrame()
+      if (!isCurrentTask(root, version)) return
+    }
   }
 }
 
 export function removeFurigana(root) {
   if (!root) return
+  nextTaskVersion(root) // 取消仍在进行的分页注音任务
   root.querySelectorAll('ruby.auto-ruby').forEach((r) => {
     let base = ''
     r.childNodes.forEach((c) => { if (c.nodeName !== 'RT' && c.nodeName !== 'RP') base += c.textContent })
     r.replaceWith(document.createTextNode(base))
   })
-  root.normalize()
 }
