@@ -28,6 +28,9 @@ const showToc = ref(false)
 // 抽屉（详情）默认收起：点击句子先出气泡，选了具体词/语法才滑开抽屉
 const showPanel = ref(false)
 const loadingChapter = ref(false)
+const furiganaLoading = ref(false)
+const furiganaError = ref('')
+let furiganaTaskId = 0
 
 // 点击位置的分词气泡
 const bubble = reactive({ show: false, x: 0, y: 0 })
@@ -118,9 +121,21 @@ async function annotateCurrentPage() {
   const content = contentEl.value
   const viewport = scrollEl.value
   if (!content || !viewport) return
-  await nextTick()
-  await addFurigana(content, viewport)
-  if (pageEnabled()) await computePages()
+  const taskId = ++furiganaTaskId
+  furiganaLoading.value = true
+  furiganaError.value = ''
+  try {
+    await nextTick()
+    await addFurigana(content, viewport)
+    if (taskId === furiganaTaskId && pageEnabled()) await computePages()
+  } catch (error) {
+    if (taskId === furiganaTaskId) {
+      furiganaError.value = error?.message || String(error)
+      settings.value.furigana = false
+    }
+  } finally {
+    if (taskId === furiganaTaskId) furiganaLoading.value = false
+  }
 }
 
 function goPage(i) {
@@ -458,7 +473,11 @@ watch(() => settings.value.furigana, async (on) => {
     return
   }
   if (on) await annotateCurrentPage()
-  else removeFurigana(contentEl.value)
+  else {
+    furiganaTaskId++
+    furiganaLoading.value = false
+    await removeFurigana(contentEl.value)
+  }
   if (pageEnabled()) await computePages()
 })
 
@@ -516,9 +535,9 @@ watch(() => ui.immersive, (v) => {
               class="vm-item"
               :class="{ on: settings.furigana }"
               :disabled="!pageEnabled()"
-              :title="pageEnabled() ? '只为当前页生成注音' : '请先关闭竖排并开启分页翻页'"
+              :title="furiganaError || (pageEnabled() ? '只为当前页生成注音' : '请先关闭竖排并开启分页翻页')"
               @click="settings.furigana = !settings.furigana"
-            ><span>汉字注音</span><span class="vm-val">{{ pageEnabled() ? (settings.furigana ? '开' : '关') : '仅分页' }}</span></button>
+            ><span>汉字注音</span><span class="vm-val">{{ furiganaLoading ? '生成中…' : (pageEnabled() ? (settings.furigana ? '开' : (furiganaError ? '失败' : '关')) : '仅分页') }}</span></button>
             <button class="vm-item" :class="{ on: settings.vertical }" @click="settings.vertical = !settings.vertical"><span>竖排（纵书）</span><span class="vm-val">{{ settings.vertical ? '开' : '关' }}</span></button>
             <button class="vm-item" :class="{ on: settings.pageMode }" @click="togglePageMode"><span>分页翻页</span><span class="vm-val">{{ settings.pageMode ? '开' : '关' }}</span></button>
             <button class="vm-item" @click="ui.showSettings = true; showView = false"><span>更多设置…</span></button>
