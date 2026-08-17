@@ -1,7 +1,6 @@
 import kuromoji from '@sglkc/kuromoji'
 
 // 自动注音专用 Worker：词典下载、解压、初始化和分词都不占用 UI 主线程。
-const CDN_DIC_PATH = 'https://cdn.jsdelivr.net/npm/@sglkc/kuromoji@1.1.0/dict/'
 
 let tokenizerPromise = null
 
@@ -29,9 +28,10 @@ function tokenizeInChunks(tokenizer, text, chunkSize = 120) {
 }
 
 self.onmessage = async ({ data }) => {
-  const { id, texts = [] } = data || {}
+  const { id, texts = [], dicPath } = data || {}
   try {
-    const tokenizer = await getTokenizer(CDN_DIC_PATH)
+    if (!dicPath) throw new Error('缺少注音词典地址')
+    const tokenizer = await getTokenizer(dicPath)
     const tokenGroups = texts.map((text) => tokenizeInChunks(tokenizer, String(text || '')).map((token) => ({
       surface: token.surface_form || '',
       reading: token.reading && token.reading !== '*' ? token.reading : ''
