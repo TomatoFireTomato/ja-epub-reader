@@ -1,14 +1,14 @@
 import kuromoji from '@sglkc/kuromoji'
 
 // 自动注音专用 Worker：词典下载、解压、初始化和分词都不占用 UI 主线程。
-const DIC_PATH = 'https://cdn.jsdelivr.net/npm/@sglkc/kuromoji@1.1.0/dict/'
+const CDN_DIC_PATH = 'https://cdn.jsdelivr.net/npm/@sglkc/kuromoji@1.1.0/dict/'
 
 let tokenizerPromise = null
 
-function getTokenizer() {
+function getTokenizer(dicPath) {
   if (tokenizerPromise) return tokenizerPromise
   tokenizerPromise = new Promise((resolve, reject) => {
-    kuromoji.builder({ dicPath: DIC_PATH }).build((err, tokenizer) => {
+    kuromoji.builder({ dicPath }).build((err, tokenizer) => {
       if (err) {
         tokenizerPromise = null
         reject(err)
@@ -18,11 +18,21 @@ function getTokenizer() {
   return tokenizerPromise
 }
 
+// Kuromoji 对个别超长、标点稀疏的小说文本会出现严重性能退化。
+// 短块独立分词不影响表层文字拼接，却能把单次计算量锁在可控范围内。
+function tokenizeInChunks(tokenizer, text, chunkSize = 120) {
+  const tokens = []
+  for (let start = 0; start < text.length; start += chunkSize) {
+    tokens.push(...tokenizer.tokenize(text.slice(start, start + chunkSize)))
+  }
+  return tokens
+}
+
 self.onmessage = async ({ data }) => {
   const { id, texts = [] } = data || {}
   try {
-    const tokenizer = await getTokenizer()
-    const tokenGroups = texts.map((text) => tokenizer.tokenize(String(text || '')).map((token) => ({
+    const tokenizer = await getTokenizer(CDN_DIC_PATH)
+    const tokenGroups = texts.map((text) => tokenizeInChunks(tokenizer, String(text || '')).map((token) => ({
       surface: token.surface_form || '',
       reading: token.reading && token.reading !== '*' ? token.reading : ''
     })))

@@ -26,6 +26,7 @@ function rubyParts(surface, reading) {
 
 const SKIP = new Set(['RUBY', 'RT', 'RP', 'SCRIPT', 'STYLE'])
 const taskVersions = new WeakMap()
+const WORKER_TIMEOUT_MS = 45000
 let worker = null
 let workerRequestId = 0
 const workerRequests = new Map()
@@ -51,12 +52,16 @@ function getWorker() {
     const request = workerRequests.get(data?.id)
     if (!request) return
     workerRequests.delete(data.id)
+    clearTimeout(request.timer)
     if (data.error) request.reject(new Error(data.error))
     else request.resolve(data.tokenGroups || [])
   }
   worker.onerror = (event) => {
     const error = new Error(event.message || '注音分词 Worker 启动失败')
-    workerRequests.forEach(({ reject }) => reject(error))
+    workerRequests.forEach(({ reject, timer }) => {
+      clearTimeout(timer)
+      reject(error)
+    })
     workerRequests.clear()
     worker?.terminate()
     worker = null
@@ -67,7 +72,18 @@ function getWorker() {
 function tokenizeOffThread(texts) {
   const id = ++workerRequestId
   return new Promise((resolve, reject) => {
-    workerRequests.set(id, { resolve, reject })
+    const timer = setTimeout(() => {
+      if (!workerRequests.has(id)) return
+      const error = new Error('注音词典加载超时，请检查网络后重试')
+      workerRequests.forEach((request) => {
+        clearTimeout(request.timer)
+        request.reject(error)
+      })
+      workerRequests.clear()
+      worker?.terminate()
+      worker = null
+    }, WORKER_TIMEOUT_MS)
+    workerRequests.set(id, { resolve, reject, timer })
     getWorker().postMessage({ id, texts })
   })
 }
@@ -156,8 +172,8 @@ function collectPageEntries(root, viewport) {
   }
 
   // 命中点通常落在字形内部，首尾各多取一小段，避免漏掉页面边缘的行。
-  // 单个异常超长文本节点也最多处理 3000 字符。
-  const MAX_CHARS = 3000
+  // 一页最多处理 1200 字符；Worker 内还会按 120 字符切块分词。
+  const MAX_CHARS = 1200
   let remaining = MAX_CHARS
   const entries = []
   for (const textNode of nodes) {
