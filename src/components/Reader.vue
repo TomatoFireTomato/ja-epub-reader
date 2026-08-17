@@ -31,6 +31,7 @@ const loadingChapter = ref(false)
 const furiganaLoading = ref(false)
 const furiganaError = ref('')
 let furiganaTaskId = 0
+let furiganaPageTimer = null
 
 // 点击位置的分词气泡
 const bubble = reactive({ show: false, x: 0, y: 0 })
@@ -138,10 +139,16 @@ async function annotateCurrentPage() {
   }
 }
 
+function scheduleCurrentPageAnnotation() {
+  clearTimeout(furiganaPageTimer)
+  // 分页使用 280ms transform 动画；等新页真正进入视口后再做 caret 命中。
+  furiganaPageTimer = setTimeout(() => annotateCurrentPage(), 320)
+}
+
 function goPage(i) {
   pageIndex.value = Math.max(0, Math.min(i, pageCount.value - 1))
   saveProgress()
-  annotateCurrentPage()
+  scheduleCurrentPageAnnotation()
 }
 function nextPage() {
   hideBubble()
@@ -449,6 +456,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearTimeout(saveTimer)
   clearTimeout(resizeTimer)
+  clearTimeout(furiganaPageTimer)
   window.removeEventListener('keydown', onKey)
   document.removeEventListener('pointerdown', onDocPointerDown)
   window.removeEventListener('resize', onResize)
