@@ -26,7 +26,13 @@ function rubyParts(surface, reading) {
 
 const SKIP = new Set(['RUBY', 'RT', 'RP', 'SCRIPT', 'STYLE'])
 const taskVersions = new WeakMap()
-const WORKER_TIMEOUT_MS = 45000
+const WORKER_TIMEOUT_MS = 120000
+const CDN_DIC_PATH = 'https://cdn.jsdelivr.net/npm/@sglkc/kuromoji@1.1.0/dict/'
+const DICTIONARY_PATH = import.meta.env.DEV
+  ? CDN_DIC_PATH
+  // Worker 构建后位于 assets/，相对它回到同源的 dict/。不要传完整同源 URL：
+  // Kuromoji 会压缩连续斜杠，导致 http(s):// 在同协议页面上被误解析。
+  : '../dict/'
 let worker = null
 let workerRequestId = 0
 const workerRequests = new Map()
@@ -74,7 +80,7 @@ function tokenizeOffThread(texts) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       if (!workerRequests.has(id)) return
-      const error = new Error('注音词典加载超时，请检查网络后重试')
+      const error = new Error('注音词典加载超时，请刷新页面后重试')
       workerRequests.forEach((request) => {
         clearTimeout(request.timer)
         request.reject(error)
@@ -84,7 +90,7 @@ function tokenizeOffThread(texts) {
       worker = null
     }, WORKER_TIMEOUT_MS)
     workerRequests.set(id, { resolve, reject, timer })
-    getWorker().postMessage({ id, texts })
+    getWorker().postMessage({ id, texts, dicPath: DICTIONARY_PATH })
   })
 }
 
